@@ -1,0 +1,6 @@
+interface:
+  display_name: "SDD Tasks"
+  short_description: "Create traceable dependency-aware work tasks"
+  default_prompt: "Use $sdd-tasks to turn the approved plan into a dependency-aware task graph."
+policy:
+  allow_implicit_invocation: false

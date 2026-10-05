@@ -1,0 +1,6 @@
+interface:
+  display_name: "SDD Change"
+  short_description: "Propagate requirement changes with traceability"
+  default_prompt: "Use $sdd-change to propagate this approved change through the active SDD artifacts."
+policy:
+  allow_implicit_invocation: false

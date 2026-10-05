@@ -1,0 +1,6 @@
+interface:
+  display_name: "SDD Plan"
+  short_description: "Plan implementation from evidence and scope"
+  default_prompt: "Use $sdd-plan to create a proportional implementation plan for the active specification."
+policy:
+  allow_implicit_invocation: false

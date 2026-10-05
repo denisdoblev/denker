@@ -1,0 +1,15 @@
+[mcp_servers.serena]
+command = "serena"
+args = [
+  "start-mcp-server",
+  "--project-from-cwd",
+  "--context=codex",
+  "--enable-web-dashboard=false",
+  "--open-web-dashboard=false",
+  "--add-mode=no-memories",
+]
+startup_timeout_sec = 15
+
+[mcp_servers.serena.env]
+SERENA_USAGE_REPORTING = "false"
+DOTNET_SYSTEM_GLOBALIZATION_INVARIANT = "1"

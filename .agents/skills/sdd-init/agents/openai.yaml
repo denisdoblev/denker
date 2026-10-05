@@ -1,0 +1,6 @@
+interface:
+  display_name: "SDD Init"
+  short_description: "Adapt SDD safely to this repository"
+  default_prompt: "Use $sdd-init to initialize a proportional SDD structure for this repository."
+policy:
+  allow_implicit_invocation: false

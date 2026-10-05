@@ -1,0 +1,6 @@
+interface:
+  display_name: "SDD Validate"
+  short_description: "Validate acceptance with fresh evidence"
+  default_prompt: "Use $sdd-validate to verify the completed change and issue an evidence-backed verdict."
+policy:
+  allow_implicit_invocation: false

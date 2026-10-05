@@ -1,0 +1,6 @@
+interface:
+  display_name: "SDD Review"
+  short_description: "Review spec standards and simplicity"
+  default_prompt: "Use $sdd-review to review this implementation across SPEC, STANDARDS, and SIMPLICITY."
+policy:
+  allow_implicit_invocation: false

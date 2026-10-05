@@ -1,0 +1,6 @@
+interface:
+  display_name: "SDD Implement"
+  short_description: "Implement ready tasks with fresh evidence"
+  default_prompt: "Use $sdd-implement to implement the selected ready task and update its evidence-backed status."
+policy:
+  allow_implicit_invocation: false
