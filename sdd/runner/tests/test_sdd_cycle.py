@@ -463,7 +463,7 @@ class RunnerTestCase(unittest.TestCase):
             self.assertIn(f'model_reasoning_effort="{effort}"', argv)
             self.assertEqual("read-only" if phase == "REVIEW" else "workspace-write", argv[argv.index("--sandbox") + 1])
             self.assertIn("sandbox_workspace_write.network_access=false", argv)
-            self.assertIn('mcp_servers."serena".enabled=false', argv)
+            self.assertIn("mcp_servers={}", argv)
         forbidden = runner._build_argv("REVIEW", Path("schema.json"), Path("answer.json"))
         forbidden[forbidden.index(MODEL)] = "gpt-6-astra"
         with self.assertRaisesRegex(OperationalStop, "fixed model policy"):
@@ -475,10 +475,8 @@ class RunnerTestCase(unittest.TestCase):
         with self.assertRaisesRegex(OperationalStop, "network access"):
             runner._assert_execution_policy("IMPLEMENT", network_enabled)
         mcp_enabled = runner._build_argv("IMPLEMENT", Path("schema.json"), Path("answer.json"))
-        mcp_enabled[mcp_enabled.index('mcp_servers."serena".enabled=false')] = (
-            'mcp_servers."serena".enabled=true'
-        )
-        with self.assertRaisesRegex(OperationalStop, "every discovered MCP"):
+        mcp_enabled[mcp_enabled.index("mcp_servers={}")] = 'mcp_servers."serena".enabled=true'
+        with self.assertRaisesRegex(OperationalStop, "empty table"):
             runner._assert_execution_policy("IMPLEMENT", mcp_enabled)
 
     def test_preflight_disables_and_audits_every_effective_mcp(self) -> None:
@@ -492,8 +490,8 @@ class RunnerTestCase(unittest.TestCase):
         self.assertEqual(0, runner.run())
         phase_calls = [argv for argv, _ in fake.calls if argv[:4] == ["codex", "--ask-for-approval", "never", "exec"]]
         self.assertTrue(phase_calls)
-        self.assertTrue(all('mcp_servers."serena".enabled=false' in argv for argv in phase_calls))
-        self.assertTrue(all('mcp_servers."user.docs".enabled=false' in argv for argv in phase_calls))
+        self.assertTrue(all("mcp_servers={}" in argv for argv in phase_calls))
+        self.assertTrue(all(not any(item.startswith("mcp_servers.") for item in argv) for argv in phase_calls))
         self.assertEqual(["serena", "user.docs"], runner.summary["effective_mcp_servers_disabled"])
 
     def test_validate_pass_requires_checks_passing_evidence_and_no_delta(self) -> None:

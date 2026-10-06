@@ -811,9 +811,9 @@ class CycleRunner:
             'web_search="disabled"',
             "-c",
             "sandbox_workspace_write.network_access=false",
+            "-c",
+            "mcp_servers={}",
         ]
-        for server in self.mcp_servers:
-            argv.extend(["-c", f"mcp_servers.{json.dumps(server, ensure_ascii=False)}.enabled=false"])
         for feature in DISABLED_FEATURES:
             argv.extend(["--disable", feature])
         argv.extend(
@@ -856,12 +856,9 @@ class CycleRunner:
         network_configs = [item for item in configs if item.startswith("sandbox_workspace_write.network_access=")]
         if network_configs != ["sandbox_workspace_write.network_access=false"]:
             raise OperationalStop("execution did not disable workspace-write network access")
-        expected_mcp_overrides = {
-            f"mcp_servers.{json.dumps(server, ensure_ascii=False)}.enabled=false" for server in self.mcp_servers
-        }
         mcp_configs = [item for item in configs if item == "mcp_servers={}" or item.startswith("mcp_servers.")]
-        if len(mcp_configs) != len(expected_mcp_overrides) or set(mcp_configs) != expected_mcp_overrides:
-            raise OperationalStop("execution did not disable every discovered MCP server")
+        if mcp_configs != ["mcp_servers={}"]:
+            raise OperationalStop("execution did not replace MCP configuration with an empty table")
         if any(item in argv for item in ("resume", "fork")):
             raise OperationalStop("execution attempted to reuse a Codex session")
         models = values("--model")

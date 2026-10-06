@@ -1,6 +1,15 @@
-# Lightweight Spec-Driven Development for Codex
+# Lightweight Spec-Driven Development for Codex and GitHub Copilot
 
-This framework turns project intent into persistent, traceable engineering artifacts without making the process heavier than the work. It combines a small documentation model with explicitly invoked Codex Agent Skills.
+This framework turns project intent into persistent, traceable engineering artifacts without making the process heavier than the work. It combines a small documentation model with a shared SDD core and thin host adapters for different agent environments.
+
+The source of truth stays shared wherever the host platforms support it:
+
+- `AGENTS.md` routes context to the relevant documentation and definitions.
+- `docs/` and `sdd/` define workflow and framework rules.
+- `.agents/skills/` contains the workflow Skills used by the SDD.
+- Host-specific adapters only change invocation syntax, agent metadata, or platform-specific configuration when required.
+
+Do not duplicate the framework as a separate Codex-only or Copilot-only implementation. Keep a single SDD and adapt only the host layer.
 
 > The SDD system must not become more complex than the development problem it is intended to simplify.
 
@@ -42,7 +51,12 @@ Classify by uncertainty, blast radius, reversibility, architectural and migratio
 - **Standard:** specify → plan → tasks → implement → review → validate. Run clarify or UI design only when needed.
 - **Architectural/high-risk:** add architecture analysis, ADRs, migration and compatibility strategy, stronger testing, and rollout evidence as the risk requires.
 
-The Skills are explicit-only. Current Codex supports invocation as `$skill-name`.
+The Skills are explicit-only. Invocation is host-specific:
+
+- Codex: `$skill-name`
+- GitHub Copilot: `/skill-name`
+
+The workflow remains shared regardless of host.
 
 ## Workflow
 
@@ -68,6 +82,22 @@ validate
 
 After specification, `$sdd-change` is an available lateral propagation route whenever an approved requirement or design changes. It is not a mandatory terminal stage: it updates only invalidated artifacts and work, then returns the change to the appropriate workflow stage.
 
+### Host invocation matrix
+
+| Workflow | Codex | GitHub Copilot |
+| --- | --- | --- |
+| specify | `$sdd-specify` | `/sdd-specify` |
+| clarify | `$sdd-clarify` | `/sdd-clarify` |
+| plan | `$sdd-plan` | `/sdd-plan` |
+| ui-design | `$ui-design` | `/ui-design` |
+| tasks | `$sdd-tasks` | `/sdd-tasks` |
+| implement | `$sdd-implement` | `/sdd-implement` |
+| review | `$sdd-review` | `/sdd-review` |
+| validate | `$sdd-validate` | `/sdd-validate` |
+| change | `$sdd-change` | `/sdd-change` |
+
+This matrix reflects the host-specific skill invocation syntax while keeping the SDD contract shared.
+
 ### Optional bounded runner
 
 For a feature that already has an accepted `tasks.md`, the standard-library runner can execute the implementation tail sequentially:
@@ -78,7 +108,7 @@ python3 sdd/runner/sdd_cycle.py --tasks specs/<feature>/tasks.md [--task T3]
 
 Each task must include `**External blocker:** none | <reason>`. The runner rejects missing or inconsistent state before changing a task. It processes ready tasks in document order through fresh `IMPLEMENT → REVIEW → VALIDATE` Codex processes, with bounded `REPAIR → REVIEW` loops for repairable findings or validation deltas. `--task` runs one ready task and omits feature validation; `--dry-run` prints the reachable order without invoking Codex, creating audit files, or changing states.
 
-The model policy is fixed: `gpt-5.6-sol` with `xhigh` for REVIEW and `medium` elsewhere. Preflight verifies the installed catalog before `ready → in_progress`; no alternate model, downgrade, resume, or fork is allowed. Runs use explicit sandbox and approval settings, structured output schemas, ephemeral sessions, disabled network/search and optional agent integrations, and an explicit `enabled=false` override for every MCP server discovered locally.
+The model policy is fixed: `gpt-5.6-sol` with `xhigh` for REVIEW and `medium` elsewhere. Preflight verifies the installed catalog before `ready → in_progress`; no alternate model, downgrade, resume, or fork is allowed. Runs use explicit sandbox and approval settings, structured output schemas, ephemeral sessions, disabled network/search and optional agent integrations, and an explicit empty MCP configuration override. Preflight still records every locally discovered MCP server in the audit summary.
 
 Audit checkpoints live under the Git-ignored `sdd/runner/runs/` by default. A custom audit root cannot overlap tracked content, and only the directory allocated for the current run is omitted from repository snapshots. Checkpoints contain bounded diagnostics, structured results, declared-versus-actual file deltas, policy and repository fingerprints, repair counts, stop reason, and final state—not full transcripts. Validation must leave tracked and non-ignored files unchanged. An interrupted or failed active task remains `in_progress`; v1 requires a human to reconcile that state before another run. A full cycle ends with feature-scope validation, and any failure there is escalated without reopening a task automatically.
 
@@ -88,16 +118,16 @@ Public options are `--tasks`, `--task`, `--max-repair-cycles` (default `3`), `--
 
 | Skill | Outcome |
 | --- | --- |
-| `$sdd-init` | Adapt the documentation layout to an existing simple repo or monorepo without overwriting useful material. |
-| `$sdd-specify` | Produce a proportional WHAT/WHY spec with traceable requirements and acceptance criteria. |
-| `$sdd-clarify` | Resolve only material ambiguities that the repository cannot answer. |
-| `$sdd-plan` | Produce the minimum viable HOW, including risk, validation, and UI/ADR decisions. |
-| `$ui-design` | Specify significant product UI/UX independently from technical implementation. |
-| `$sdd-tasks` | Build a dependency-aware graph of verifiable implementation outcomes. |
-| `$sdd-implement` | Implement a ready task within its agreed scope and report deviations. |
-| `$sdd-review` | Review independently along SPEC, STANDARDS, and SIMPLICITY axes. |
-| `$sdd-validate` | Test completion claims against fresh evidence and the Definition of Done. |
-| `$sdd-change` | Propagate a changed requirement through affected artifacts and implementation. |
+| `$sdd-init` / `/sdd-init` | Adapt the documentation layout to an existing simple repo or monorepo without overwriting useful material. |
+| `$sdd-specify` / `/sdd-specify` | Produce a proportional WHAT/WHY spec with traceable requirements and acceptance criteria. |
+| `$sdd-clarify` / `/sdd-clarify` | Resolve only material ambiguities that the repository cannot answer. |
+| `$sdd-plan` / `/sdd-plan` | Produce the minimum viable HOW, including risk, validation, and UI/ADR decisions. |
+| `$ui-design` / `/ui-design` | Specify significant product UI/UX independently from technical implementation. |
+| `$sdd-tasks` / `/sdd-tasks` | Build a dependency-aware graph of verifiable implementation outcomes. |
+| `$sdd-implement` / `/sdd-implement` | Implement a ready task within its agreed scope and report deviations. |
+| `$sdd-review` / `/sdd-review` | Review independently along SPEC, STANDARDS, and SIMPLICITY axes. |
+| `$sdd-validate` / `/sdd-validate` | Test completion claims against fresh evidence and the Definition of Done. |
+| `$sdd-change` / `/sdd-change` | Propagate a changed requirement through affected artifacts and implementation. |
 
 ## Tools by stage
 

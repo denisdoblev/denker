@@ -262,7 +262,7 @@ Adapted:
 
 - Fresh headless processes with structured outputs for review, repair, and validation handoffs.
 - Bounded repair loops that stop on success, attempt limit, repeated feedback, no repository change, or required human judgment.
-- Explicit sandbox, approval, ephemeral-session, model, reasoning-effort, optional-feature, web-search, workspace-write network, and per-server MCP controls for unattended local execution.
+- Explicit sandbox, approval, ephemeral-session, model, reasoning-effort, optional-feature, web-search, workspace-write network, and empty MCP configuration for unattended local execution; locally discovered servers remain recorded in the audit.
 - Compact per-run audit records instead of persisted rollouts or full transcripts.
 
 Rejected:
