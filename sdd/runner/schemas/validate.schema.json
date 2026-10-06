@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "scope": { "type": "string", "enum": ["TASK", "FEATURE"] },
+    "verdict": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED"] },
+    "action": { "type": "string", "enum": ["NONE", "AUTO_FIX", "HUMAN_DECISION"] },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["PASS", "FAIL", "NOT_VERIFIED"] },
+          "evidence": { "type": "string", "minLength": 1 }
+        },
+        "required": ["name", "status", "evidence"],
+        "additionalProperties": false
+      }
+    },
+    "evidence": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "remaining_delta": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "decision_required": { "type": ["string", "null"] }
+  },
+  "required": ["scope", "verdict", "action", "checks", "evidence", "remaining_delta", "decision_required"],
+  "additionalProperties": false
+}

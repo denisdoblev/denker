@@ -68,6 +68,22 @@ validate
 
 After specification, `$sdd-change` is an available lateral propagation route whenever an approved requirement or design changes. It is not a mandatory terminal stage: it updates only invalidated artifacts and work, then returns the change to the appropriate workflow stage.
 
+### Optional bounded runner
+
+For a feature that already has an accepted `tasks.md`, the standard-library runner can execute the implementation tail sequentially:
+
+```text
+python3 sdd/runner/sdd_cycle.py --tasks specs/<feature>/tasks.md [--task T3]
+```
+
+Each task must include `**External blocker:** none | <reason>`. The runner rejects missing or inconsistent state before changing a task. It processes ready tasks in document order through fresh `IMPLEMENT → REVIEW → VALIDATE` Codex processes, with bounded `REPAIR → REVIEW` loops for repairable findings or validation deltas. `--task` runs one ready task and omits feature validation; `--dry-run` prints the reachable order without invoking Codex, creating audit files, or changing states.
+
+The model policy is fixed: `gpt-5.6-sol` with `xhigh` for REVIEW and `medium` elsewhere. Preflight verifies the installed catalog before `ready → in_progress`; no alternate model, downgrade, resume, or fork is allowed. Runs use explicit sandbox and approval settings, structured output schemas, ephemeral sessions, disabled network/search and optional agent integrations, and an explicit `enabled=false` override for every MCP server discovered locally.
+
+Audit checkpoints live under the Git-ignored `sdd/runner/runs/` by default. A custom audit root cannot overlap tracked content, and only the directory allocated for the current run is omitted from repository snapshots. Checkpoints contain bounded diagnostics, structured results, declared-versus-actual file deltas, policy and repository fingerprints, repair counts, stop reason, and final state—not full transcripts. Validation must leave tracked and non-ignored files unchanged. An interrupted or failed active task remains `in_progress`; v1 requires a human to reconcile that state before another run. A full cycle ends with feature-scope validation, and any failure there is escalated without reopening a task automatically.
+
+Public options are `--tasks`, `--task`, `--max-repair-cycles` (default `3`), `--runs-dir`, and `--dry-run`. Exit codes are `0` for success or a valid dry-run, `1` for a safe operational stop, and `2` for invalid usage or artifact configuration.
+
 ### Skills
 
 | Skill | Outcome |

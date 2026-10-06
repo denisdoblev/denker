@@ -2,6 +2,8 @@
 
 Research performed against official upstream repositories on 2026-10-01 and extended with the tool-policy sources listed below on 2026-10-02. This framework synthesizes principles and workflows in original wording; it does not vendor or substantially copy upstream Skills. Relevant repositories were checked under their published licenses; linked material is attribution and decision evidence, not vendored text.
 
+The bounded runner research was verified against current official OpenAI documentation on 2026-10-05.
+
 `openai/skills` is now deprecated. Entries below identify historical material that was inspected; current OpenAI Skill behavior is verified against `openai/codex`, the OpenAI Plugins documentation and repository, and the Agent Skills specification.
 
 ## Conflict resolution applied
@@ -245,6 +247,28 @@ Rejected or deferred:
 - Engram plugin/MCP/hooks and any persistent memory provider without a continuity pilot.
 - dependency-cruiser, ast-grep, Knip, Semgrep, Playwright, and Repomix installation where no matching code or product surface exists.
 - Cavecrew/Caveman integration, proxying, compression wrappers, model routing, or subagent orchestration. Independent focused Skills are outside this framework decision.
+
+## Bounded SDD runner
+
+Official sources recorded:
+
+- OpenAI Cookbook, [Build iterative repair loops with Codex](https://developers.openai.com/cookbook/examples/codex/build_iterative_repair_loops_with_codex).
+- OpenAI, [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode).
+- OpenAI, [Codex developer commands](https://learn.chatgpt.com/docs/developer-commands).
+- OpenAI, [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).
+- OpenAI, [GPT-5.6 Sol model](https://developers.openai.com/api/docs/models/gpt-5.6-sol).
+
+Adapted:
+
+- Fresh headless processes with structured outputs for review, repair, and validation handoffs.
+- Bounded repair loops that stop on success, attempt limit, repeated feedback, no repository change, or required human judgment.
+- Explicit sandbox, approval, ephemeral-session, model, reasoning-effort, optional-feature, web-search, workspace-write network, and per-server MCP controls for unattended local execution.
+- Compact per-run audit records instead of persisted rollouts or full transcripts.
+
+Rejected:
+
+- Parallel artifact processing, configurable model routing, session resume/fork, automatic feature-scope repair, remote services, queues, databases, and new MCP infrastructure.
+- Copying the Cookbook implementation or its example-specific notebook, dependency, concurrency, environment-variable, and model-selection machinery.
 
 ## Licenses and attribution posture
 

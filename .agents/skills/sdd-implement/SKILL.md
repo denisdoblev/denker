@@ -29,6 +29,18 @@ Implement a requested or ready task against the accepted contract.
 - Do not claim checks that were not run or hide failing output.
 - Do not mark dependent tasks ready until every blocker is completed.
 
+## Runner-owned mode
+
+Use this mode only when the prompt contains both `SDD_RUNNER_MODE: true` and an
+`SDD_RUNNER_PHASE` of `IMPLEMENT` or `REPAIR`.
+
+- The runner owns every task status and the ready frontier. Do not edit status fields.
+- In `IMPLEMENT`, implement only the supplied task from its linked artifacts and run focused checks.
+- In `REPAIR`, address only the supplied review findings or validation delta. Do not broaden the task or claim validation passed.
+- Use only local repository tools. Do not spawn agents, use apps/plugins/MCP/browser/computer tools, run hooks, or install dependencies.
+- Return only the JSON object required by the runner's output schema: result, repository-relative modified paths, concise evidence, and a human decision when blocked.
+- Report `BLOCKED` instead of choosing a materially new requirement or performing an unauthorized action.
+
 ## Report
 
 Describe the outcome, files changed, task status, commands and results, deviations, remaining risks, and next ready tasks. Route the completed feature to `$sdd-review`, then `$sdd-validate`.

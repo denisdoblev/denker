@@ -16,6 +16,7 @@ The ready frontier is every task currently marked `ready`.
 
 **Status:** ready
 **Depends on:** none
+**External blocker:** none
 **Requirements:** FR-001, AC-001
 
 **Expected outcome:**
@@ -34,6 +35,7 @@ The ready frontier is every task currently marked `ready`.
 
 **Status:** blocked
 **Depends on:** T1
+**External blocker:** none
 **Requirements:** [IDs]
 
 **Expected outcome:**

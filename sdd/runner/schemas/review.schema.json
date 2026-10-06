@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "verdict": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED"] },
+    "action": { "type": "string", "enum": ["NONE", "AUTO_FIX", "HUMAN_DECISION"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "axis": { "type": "string", "enum": ["SPEC", "STANDARDS", "SIMPLICITY"] },
+          "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+          "location": { "type": "string", "minLength": 1 },
+          "evidence": { "type": "string", "minLength": 1 },
+          "contract": { "type": "string", "minLength": 1 },
+          "impact": { "type": "string", "minLength": 1 },
+          "recommendation": { "type": "string", "minLength": 1 }
+        },
+        "required": ["axis", "severity", "location", "evidence", "contract", "impact", "recommendation"],
+        "additionalProperties": false
+      }
+    },
+    "decision_required": { "type": ["string", "null"] }
+  },
+  "required": ["verdict", "action", "findings", "decision_required"],
+  "additionalProperties": false
+}

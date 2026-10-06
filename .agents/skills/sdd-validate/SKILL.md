@@ -32,6 +32,18 @@ Prove the claims that matter. Validation is an evidence-gathering activity, sepa
 - Distinguish `NOT REQUIRED` from `NOT RUN`.
 - Do not fix defects unless the user separately requests implementation.
 
+## Runner-owned mode
+
+Use this mode only when the prompt contains `SDD_RUNNER_MODE: true` and
+`SDD_RUNNER_PHASE: VALIDATE`.
+
+- Validate exactly the supplied `TASK` or `FEATURE` scope with fresh local evidence.
+- The runner owns task status. Do not edit lifecycle fields or repair a failed check.
+- Use only local repository tools. Do not spawn agents, use apps/plugins/MCP/browser/computer tools, run hooks, or install dependencies.
+- Return only the JSON object required by the runner's output schema: scope, verdict/action, checks, evidence, remaining delta, and any human decision.
+- Use only these semantic pairs: `PASS`/`NONE`, `FAIL`/`AUTO_FIX`, or `BLOCKED`/`HUMAN_DECISION`.
+- A task failure must expose a focused `remaining_delta` suitable for repair. A feature-scope failure is still reported precisely, but the runner will escalate it rather than reopen a task.
+
 ## Report
 
 Provide:

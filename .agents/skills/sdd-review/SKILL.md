@@ -27,6 +27,18 @@ Review the implementation on three independent axes: **SPEC**, **STANDARDS**, an
 - Do not claim runtime correctness solely from reading code.
 - Review may recommend validation, but it does not replace `$sdd-validate`.
 
+## Runner-owned mode
+
+Use this mode only when the prompt contains `SDD_RUNNER_MODE: true` and
+`SDD_RUNNER_PHASE: REVIEW`.
+
+- Treat the supplied paths and bounded runner-generated diff as the fixed review target, checking repository files only where evidence requires it.
+- Use only local read-only repository tools. Do not modify files, spawn agents, use apps/plugins/MCP/browser/computer tools, run hooks, or install dependencies.
+- Return only the JSON object required by the runner's output schema.
+- Use only these semantic pairs: `PASS`/`NONE`, `FAIL`/`AUTO_FIX`, or `BLOCKED`/`HUMAN_DECISION`.
+- Classify every finding as SPEC, STANDARDS, or SIMPLICITY and include the evidence, contract, impact, and smallest responsible recommendation required by `references/review-criteria.md`.
+- Reserve `BLOCKED` for a decision the repair loop cannot make safely. A repairable defect is `FAIL`.
+
 ## Report
 
 Use the format in the criteria reference. Distinguish confirmed defects from questions and risks.

@@ -26,6 +26,7 @@ Treat change as a traceable delta, not a reason to regenerate everything.
 5. Update the specification first. Preserve stable IDs when meaning remains stable; add or retire IDs explicitly when it changes. Record significant change history.
 6. Update only affected downstream artifacts in order: UI or architecture/ADR when applicable, plan, then tasks. Reclassify the plan's change profile and full-validation decision when impact changes.
 7. Recompute dependencies and statuses. Reopen completed tasks when their outcome is invalidated and mark stale validation evidence as such.
+   Preserve every task's required `**External blocker:** none | <reason>` field; update it explicitly when the approved change adds or resolves an external blocker.
 8. Report implementation areas that now diverge from the contract. Do not implement them unless separately requested.
 
 ## Boundaries
