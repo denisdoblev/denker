@@ -1,11 +1,11 @@
 # Arquitectura
 
 - **Alcance:** sistema global
-- **Estado:** estado actual y restricciones aprobadas al 2026-10-05
+- **Estado:** estado actual y restricciones aprobadas al 2026-10-07
 
 ## Estado actual
 
-El repositorio contiene el monorepo mínimo de Turborepo y un único workspace de producto en `apps/web`. Ese workspace implementa un shell de Next.js con App Router y TypeScript, la base local de shadcn/ui y pruebas Jest/React Testing Library. El shell entrega HTML neutral con `Cargando espacio de trabajo local` antes de que el cliente resuelva la hidratación. Ya existen el modelo de dominio tipado, una store React, persistencia local recuperable y los recorridos locales para crear y navegar Projects, PRDs y Chats, consultar sus documentos iniciales y guardar la configuración conceptual de repositorio. Demo Mode, edición documental y lifecycle todavía no están implementados.
+El repositorio contiene el monorepo mínimo de Turborepo y un único workspace de producto en `apps/web`. Ese workspace implementa un shell de Next.js con App Router y TypeScript, la base local de shadcn/ui y pruebas Jest/React Testing Library. El shell entrega HTML neutral con `Cargando espacio de trabajo local` antes de que el cliente resuelva la hidratación. Ya existen el modelo de dominio tipado, una store React, persistencia local recuperable, los recorridos locales para crear y navegar Projects, PRDs y Chats, la edición explícita de sus documentos Markdown, la resolución persistente de propuestas sensibles, la sincronización de demostración mediante un scheduler local inyectable, Demo Mode conversacional mediante fixtures y transiciones deterministas, y el lifecycle completo con review, snapshots inmutables y continuación explícita. El shell adapta navegación y documentos como regiones simultáneas en desktop, rail y sheets en tablet, y sheets mutuamente excluyentes alrededor del Chat en mobile. La aceptación funcional manual de T9 está confirmada para Chrome estable vigente; versiones antiguas y otros navegadores quedan fuera del contrato del MVP.
 
 La raíz fija pnpm mediante `packageManager`, conserva un lockfile único y expone `dev`, `typecheck`, `lint`, `test` y `build`. El build genera la ruta `/` de forma estática, sin fuentes remotas, secretos ni servicios externos.
 
@@ -28,7 +28,8 @@ Denker será una aplicación frontend local y single-user para convertir convers
 - La topología implementada es un monorepo Turborepo con un único workspace de producto, `apps/web`; no existen packages compartidos.
 - `apps/web` usa Next.js, App Router y TypeScript. shadcn/ui vive dentro de la aplicación mediante `components.json`, tokens CSS, `src/lib/utils.ts` y primitives bajo `src/components/ui`.
 - Los componentes de presentación no acceden a `localStorage`. Una store React compone el dominio con un puerto sustituible de persistencia y el adaptador de navegador posee ese acceso.
-- La persistencia local y la futura sincronización con repositorio son responsabilidades separadas.
+- El Markdown guardado vive en el envelope persistido; el borrador, el modo del editor y el feedback de Clipboard son estado transitorio. La copia usa un puerto sustituible y el preview usa `react-markdown` con GFM sin HTML crudo.
+- La persistencia local y la sincronización de demostración son responsabilidades separadas; el scheduler de sync sólo cambia metadata local y no conoce red ni providers.
 - Demo Mode depende de fixtures deterministas y no se convierte en una capa de inteligencia de agente.
 - Los límites futuros para LLM, GitHub o backend se introducirán sólo cuando un PRD activo los requiera.
 

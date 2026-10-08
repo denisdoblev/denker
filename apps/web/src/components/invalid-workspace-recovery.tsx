@@ -49,7 +49,7 @@ export function InvalidWorkspaceRecovery() {
                 <div className="mt-6 flex justify-end gap-2">
                   <AlertDialog.Close
                     ref={cancelButtonRef}
-                    render={<Button variant="outline" />}
+                    render={<Button variant="outline" autoFocus />}
                   >
                     Cancelar
                   </AlertDialog.Close>

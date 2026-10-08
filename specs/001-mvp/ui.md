@@ -261,7 +261,9 @@ El estado `Draft`, `In review` o `Final` aparece junto al nombre del PRD y no de
 - `Continue work` abre una decisión con dos opciones explícitas: `Create a new version of this PRD` y `Create a new PRD for a different initiative`.
 - La recomendación del escenario puede preseleccionar visualmente una opción, pero no crea nada hasta `Confirm`.
 
-La convención de nombre y el contenido inicial de PRDs posteriores o nuevas versiones no está definida por la spec; queda como pregunta abierta y no se infiere en este contrato.
+Al confirmar `Create a new version of this PRD`, el PRD conserva su nombre, muestra el siguiente número de versión, copia exactamente el último snapshot final como documento editable y abre un Chat vacío nuevo. El snapshot anterior continúa disponible como `Final` y `Read only`.
+
+Al confirmar `Create a new PRD for a different initiative`, se crea el siguiente nombre numerado disponible del Project con tres dígitos (`PRD 002`, `PRD 003`, etc.), un documento inicial con secciones Objetivo y Requisitos en `TBD`, y su primer Chat vacío. Ambas opciones conservan el Product Context compartido.
 
 ### 8. Repositorio conceptual y sync mockeado
 
@@ -292,7 +294,8 @@ El color o icono apoya, pero nunca sustituye, estos textos.
 | Aplicación | Storage invalid | Superficie bloqueante de recuperación; explica que no puede cargar el dato, no lo borra y ofrece sólo `Reset local data`. |
 | Chat | Vacío | Invitación a describir la idea, acceso a documentos y composer listo. |
 | Chat | Con historial | Mensajes del usuario y respuestas de demo identificados por autor, en orden estable. |
-| Chat | Error de escenario | Alert inline con fallo y la recuperación definida por el fixture; no elimina el contenido confirmado. |
+| Chat | Respuesta de demostración interrumpida | Alert inline `No se pudo completar la respuesta de demostración. Tu contenido guardado no cambió.` con `Reintentar respuesta`; al activarlo añade la respuesta fija prevista. |
+| Chat | Escenario no disponible | Alert inline `No se pudo cargar el escenario de demostración. Tu contenido guardado no cambió.` con `Volver al Chat`; al activarlo restaura el punto anterior sin modificar documentos ni historial confirmado. |
 | Composer | Vacío | `Send message` deshabilitado. |
 | Documento | Preview limpio | Markdown renderizado; `Saved locally`; acciones de edición según tipo/estado. |
 | Documento | Edit limpio | Fuente editable; Save/Discard deshabilitados hasta modificar. |
@@ -417,6 +420,4 @@ No se fijan paleta, familia tipográfica de marca, escala de espacios ni set de 
 
 La interfaz y todo el contenido visible para el usuario se implementan en español. Los labels y estados normativos escritos en inglés en este contrato se conservan únicamente para trazabilidad y deben traducirse en la UI; no se introduce infraestructura de i18n en el MVP.
 
-1. **Nombres y contenido inicial posterior a Final:** la spec no define cómo numerar una nueva versión ni qué contenido y primer Chat recibe un PRD nuevo creado desde `Continue work`. Debe aclararse antes de implementar AC-013; no corresponde inventarlo en UI design.
-2. **Catálogo final de errores:** cada fixture debe aportar texto y recuperación concretos. Este contrato define el patrón, pero no crea fallos de dominio ausentes en la spec.
-3. **Tokens visuales:** no existe identidad ni base ejecutable. Paleta, tipografía exacta, espacios e iconos se concretarán al crear la app, respetando la dirección y las verificaciones de contraste aquí definidas.
+1. **Tokens visuales:** no existe identidad ni base ejecutable. Paleta, tipografía exacta, espacios e iconos se concretarán al crear la app, respetando la dirección y las verificaciones de contraste aquí definidas.

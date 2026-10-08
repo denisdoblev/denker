@@ -1,5 +1,6 @@
 export type PrdLifecycle = "draft" | "review" | "final";
 export type SyncState = "synced" | "unsynced" | "syncing" | "failed";
+export type DemoSyncResult = Extract<SyncState, "synced" | "failed">;
 export type ProposalCategory =
   | "remove-requirement"
   | "change-decision"
@@ -60,6 +61,11 @@ export interface SensitiveProposal {
   resolution: "pending" | "accepted" | "rejected";
 }
 
+export type ProposalResolution = Extract<
+  SensitiveProposal["resolution"],
+  "accepted" | "rejected"
+>;
+
 export interface Prd {
   id: string;
   title: string;
@@ -95,6 +101,8 @@ export interface WorkspaceEnvelopeV1 {
   version: 1;
   workspace: WorkspaceState;
 }
+
+export type PrdContinuation = "new-version" | "new-prd";
 
 export const createEmptyWorkspace = (): WorkspaceState => ({
   projects: [],
@@ -294,6 +302,329 @@ export function saveRepositoryConfiguration(
         : project,
     ),
     syncState: "unsynced",
+  };
+}
+
+export function savePrdMarkdown(
+  workspace: WorkspaceState,
+  projectId: string,
+  prdId: string,
+  markdown: string,
+): WorkspaceState {
+  const project = workspace.projects.find(({ id }) => id === projectId);
+  const prd = project?.prds.find(({ id }) => id === prdId);
+  if (!prd || prd.lifecycle === "final") return workspace;
+
+  return {
+    ...workspace,
+    projects: workspace.projects.map((candidateProject) =>
+      candidateProject.id !== projectId
+        ? candidateProject
+        : {
+            ...candidateProject,
+            prds: candidateProject.prds.map((candidatePrd) =>
+              candidatePrd.id === prdId
+                ? { ...candidatePrd, document: { markdown } }
+                : candidatePrd,
+            ),
+          },
+    ),
+    syncState: "unsynced",
+  };
+}
+
+export function saveProductContextMarkdown(
+  workspace: WorkspaceState,
+  projectId: string,
+  markdown: string,
+): WorkspaceState {
+  if (!workspace.projects.some(({ id }) => id === projectId)) return workspace;
+
+  return {
+    ...workspace,
+    projects: workspace.projects.map((project) =>
+      project.id === projectId
+        ? { ...project, productContext: { markdown } }
+        : project,
+    ),
+    syncState: "unsynced",
+  };
+}
+
+export function startPrdReview(
+  workspace: WorkspaceState,
+  projectId: string,
+  prdId: string,
+): WorkspaceState {
+  return changePrdLifecycle(workspace, projectId, prdId, "draft", "review");
+}
+
+export function returnPrdToDraft(
+  workspace: WorkspaceState,
+  projectId: string,
+  prdId: string,
+): WorkspaceState {
+  return changePrdLifecycle(workspace, projectId, prdId, "review", "draft");
+}
+
+function changePrdLifecycle(
+  workspace: WorkspaceState,
+  projectId: string,
+  prdId: string,
+  expected: PrdLifecycle,
+  next: PrdLifecycle,
+): WorkspaceState {
+  const project = workspace.projects.find(({ id }) => id === projectId);
+  const prd = project?.prds.find(({ id }) => id === prdId);
+  if (!prd || prd.lifecycle !== expected) return workspace;
+
+  return {
+    ...workspace,
+    projects: workspace.projects.map((candidateProject) =>
+      candidateProject.id !== projectId
+        ? candidateProject
+        : {
+            ...candidateProject,
+            prds: candidateProject.prds.map((candidatePrd) =>
+              candidatePrd.id === prdId
+                ? { ...candidatePrd, lifecycle: next }
+                : candidatePrd,
+            ),
+          },
+    ),
+    syncState: "unsynced",
+  };
+}
+
+export function finalizePrd(
+  workspace: WorkspaceState,
+  projectId: string,
+  prdId: string,
+  acceptsRemainingWarnings: boolean,
+): WorkspaceState {
+  const project = workspace.projects.find(({ id }) => id === projectId);
+  const prd = project?.prds.find(({ id }) => id === prdId);
+  if (!prd || prd.lifecycle !== "review") return workspace;
+  const hasRemainingWarnings = prd.findings.some(
+    ({ kind, resolved }) => kind === "warning" && !resolved,
+  );
+  if (hasRemainingWarnings && !acceptsRemainingWarnings) return workspace;
+
+  const version = Math.max(0, ...prd.snapshots.map((snapshot) => snapshot.version)) + 1;
+  const snapshot: PrdSnapshot = {
+    id: nextId(`${prd.id}-snapshot`, prd.snapshots.map(({ id }) => id)),
+    version,
+    markdown: prd.document.markdown,
+  };
+
+  return {
+    ...workspace,
+    projects: workspace.projects.map((candidateProject) =>
+      candidateProject.id !== projectId
+        ? candidateProject
+        : {
+            ...candidateProject,
+            prds: candidateProject.prds.map((candidatePrd) =>
+              candidatePrd.id === prdId
+                ? {
+                    ...candidatePrd,
+                    lifecycle: "final",
+                    snapshots: [...candidatePrd.snapshots, snapshot],
+                  }
+                : candidatePrd,
+            ),
+          },
+    ),
+    syncState: "unsynced",
+  };
+}
+
+const initialPrdMarkdown = (title: string): string =>
+  `# ${title}\n\n## Objetivo\n\nTBD\n\n## Requisitos\n\nTBD`;
+
+export function continueFinalPrd(
+  workspace: WorkspaceState,
+  selection: ActiveSelection,
+  continuation: PrdContinuation,
+): WorkspaceState {
+  const project = workspace.projects.find(({ id }) => id === selection.projectId);
+  const prd = project?.prds.find(({ id }) => id === selection.prdId);
+  if (!project || !prd || prd.lifecycle !== "final") return workspace;
+
+  if (continuation === "new-version") {
+    const lastSnapshot = prd.snapshots.reduce<PrdSnapshot | null>(
+      (latest, snapshot) => !latest || snapshot.version > latest.version ? snapshot : latest,
+      null,
+    );
+    if (!lastSnapshot) return workspace;
+    const chatId = nextId(`${prd.id}-chat`, prd.chats.map(({ id }) => id));
+    const chat: Chat = {
+      id: chatId,
+      title: `Chat ${prd.chats.length + 1}`,
+      messages: [],
+      scenarioId: null,
+      scenarioStep: 0,
+    };
+    return {
+      ...workspace,
+      projects: workspace.projects.map((candidateProject) =>
+        candidateProject.id !== project.id
+          ? candidateProject
+          : {
+              ...candidateProject,
+              prds: candidateProject.prds.map((candidatePrd) =>
+                candidatePrd.id !== prd.id
+                  ? candidatePrd
+                  : {
+                      ...candidatePrd,
+                      lifecycle: "draft",
+                      document: { markdown: lastSnapshot.markdown },
+                      chats: [...candidatePrd.chats, chat],
+                      findings: [],
+                    },
+              ),
+            },
+      ),
+      activeSelection: { projectId: project.id, prdId: prd.id, chatId },
+      syncState: "unsynced",
+    };
+  }
+
+  const nextNumber = Math.max(
+    0,
+    ...project.prds.map(({ title }) => {
+      const match = /^PRD (\d{3})$/.exec(title);
+      return match ? Number(match[1]) : 0;
+    }),
+  ) + 1;
+  const title = `PRD ${String(nextNumber).padStart(3, "0")}`;
+  const prdId = nextId(`${project.id}-prd`, project.prds.map(({ id }) => id));
+  const chatId = `${prdId}-chat-1`;
+  const nextPrd: Prd = {
+    id: prdId,
+    title,
+    lifecycle: "draft",
+    document: { markdown: initialPrdMarkdown(title) },
+    chats: [{
+      id: chatId,
+      title: "Chat 1",
+      messages: [],
+      scenarioId: null,
+      scenarioStep: 0,
+    }],
+    snapshots: [],
+    findings: [],
+    proposals: [],
+  };
+  return {
+    ...workspace,
+    projects: workspace.projects.map((candidateProject) =>
+      candidateProject.id === project.id
+        ? { ...candidateProject, prds: [...candidateProject.prds, nextPrd] }
+        : candidateProject,
+    ),
+    activeSelection: { projectId: project.id, prdId, chatId },
+    syncState: "unsynced",
+  };
+}
+
+export function resolveSensitiveProposal(
+  workspace: WorkspaceState,
+  selection: ActiveSelection,
+  proposalId: string,
+  resolution: ProposalResolution,
+): WorkspaceState {
+  const project = workspace.projects.find(({ id }) => id === selection.projectId);
+  const prd = project?.prds.find(({ id }) => id === selection.prdId);
+  const proposal = prd?.proposals.find(({ id }) => id === proposalId);
+  if (!project || !prd || !proposal || proposal.resolution !== "pending") {
+    return workspace;
+  }
+  if (resolution === "accepted" && prd.lifecycle === "final") return workspace;
+
+  const changesProductContext = proposal.category === "change-product-context";
+  return {
+    ...workspace,
+    projects: workspace.projects.map((candidateProject) =>
+      candidateProject.id !== project.id
+        ? candidateProject
+        : {
+            ...candidateProject,
+            productContext:
+              resolution === "accepted" && changesProductContext
+                ? { markdown: proposal.proposedMarkdown }
+                : candidateProject.productContext,
+            prds: candidateProject.prds.map((candidatePrd) =>
+              candidatePrd.id !== prd.id
+                ? candidatePrd
+                : {
+                    ...candidatePrd,
+                    document:
+                      resolution === "accepted" && !changesProductContext
+                        ? { markdown: proposal.proposedMarkdown }
+                        : candidatePrd.document,
+                    proposals: candidatePrd.proposals.map((candidateProposal) =>
+                      candidateProposal.id === proposal.id
+                        ? { ...candidateProposal, resolution }
+                        : candidateProposal,
+                    ),
+                  },
+            ),
+          },
+    ),
+    syncState: "unsynced",
+  };
+}
+
+export function beginDemoSync(
+  workspace: WorkspaceState,
+  projectId: string,
+): WorkspaceState {
+  const project = workspace.projects.find(({ id }) => id === projectId);
+  if (!project?.repository || workspace.syncState === "syncing") return workspace;
+
+  return { ...workspace, syncState: "syncing" };
+}
+
+export function completeDemoSync(
+  workspace: WorkspaceState,
+  result: DemoSyncResult,
+): WorkspaceState {
+  if (workspace.syncState !== "syncing") return workspace;
+  return { ...workspace, syncState: result };
+}
+
+export function applyPrdFixtureMarkdown(
+  workspace: WorkspaceState,
+  projectId: string,
+  prdId: string,
+  expectedMarkdown: string,
+  markdown: string,
+): WorkspaceState {
+  const project = workspace.projects.find(({ id }) => id === projectId);
+  const prd = project?.prds.find(({ id }) => id === prdId);
+  if (
+    !prd
+    || prd.lifecycle === "final"
+    || prd.document.markdown !== expectedMarkdown
+  ) {
+    return workspace;
+  }
+
+  return {
+    ...workspace,
+    projects: workspace.projects.map((candidateProject) =>
+      candidateProject.id !== projectId
+        ? candidateProject
+        : {
+            ...candidateProject,
+            prds: candidateProject.prds.map((candidatePrd) =>
+              candidatePrd.id === prdId
+                ? { ...candidatePrd, document: { markdown } }
+                : candidatePrd,
+            ),
+          },
+    ),
   };
 }
 

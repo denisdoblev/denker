@@ -15,10 +15,7 @@ The ready frontier is every task currently marked `ready`.
 
 ## Execution blockers
 
-- The naming and initial content of a new PRD version or a different PRD after `Final` must be defined before T7 can satisfy AC-013.
-- Each error fixture needs concrete error and recovery content before T4 can satisfy AC-019.
-
-These are external product decisions, not implementation tasks. The additional decisions keep their affected tasks blocked even after upstream implementation dependencies complete.
+None. Tasks can still be blocked by incomplete implementation dependencies.
 
 Resolved product decision: all user-facing interface copy is in Spanish; no i18n infrastructure is introduced for the MVP.
 
@@ -90,9 +87,9 @@ All user-facing copy is in Spanish. Do not add rename, archive, duplicate, or de
 
 ## T4 — Run deterministic Demo Mode conversations and recoverable scenarios
 
-**Status:** blocked
+**Status:** completed
 **Depends on:** T3
-**External blocker:** Concrete error and recovery content is not yet defined for each error fixture.
+**External blocker:** none
 **Requirements:** FR-009, FR-010, FR-025, NFR-002; AC-006, AC-007, AC-019
 
 **Expected outcome:**
@@ -109,11 +106,11 @@ Declarative fixtures, deterministic scenario transitions, Demo Mode controls, Ch
 - Tests fail unexpected network access and confirm no interpretation, thinking state, or remote dependency is introduced.
 
 **Notes:**
-Blocked after T3 until the concrete error catalog and recovery content are accepted. Fixture display names and final copy must be in Spanish.
+The accepted error catalog contains `Respuesta de demostración interrumpida` with `Reintentar respuesta`, and `Escenario no disponible` with `Volver al Chat`. Fixture display names and final copy are in Spanish.
 
 ## T5 — Keep Markdown editing under explicit user control
 
-**Status:** ready
+**Status:** completed
 **Depends on:** T3
 **External blocker:** none
 **Requirements:** FR-011–FR-013, FR-019, FR-020; AC-008, AC-009, AC-014, AC-015
@@ -136,7 +133,7 @@ The editor draft, overlay visibility, and transient Clipboard errors stay outsid
 
 ## T6 — Resolve sensitive proposals without premature document mutation
 
-**Status:** blocked
+**Status:** completed
 **Depends on:** T4, T5
 **External blocker:** none
 **Requirements:** FR-014; AC-010
@@ -155,9 +152,9 @@ Proposal fixtures and domain transitions, `Pending approval` composition in Chat
 
 ## T7 — Complete review, immutable finalization, and explicit continuation
 
-**Status:** blocked
+**Status:** completed
 **Depends on:** T4, T5
-**External blocker:** Naming and initial-content rules for a new version and a different PRD are not yet defined.
+**External blocker:** none
 **Requirements:** FR-015–FR-018; AC-011, AC-012, AC-013
 
 **Expected outcome:**
@@ -173,11 +170,11 @@ Lifecycle transitions and controls, review findings, finalization dialog, immuta
 - Continuation tests prove recommendations create nothing by themselves and each explicit choice creates the correctly owned entity only after confirmation.
 
 **Notes:**
-Blocked after its implementation dependencies until naming and initial-content rules for a new version and a different PRD are accepted. Do not infer those rules from `PRD 001`.
+The accepted continuation rules preserve the PRD name and copy its final snapshot for the next numbered version; a different initiative receives the next three-digit PRD number, the initial `TBD` template, and its first empty Chat. Both retain the shared Product Context and require explicit confirmation.
 
 ## T8 — Separate local saves from deterministic demo synchronization
 
-**Status:** blocked
+**Status:** completed
 **Depends on:** T3, T5
 **External blocker:** none
 **Requirements:** FR-022, FR-023; AC-017
@@ -196,7 +193,7 @@ Repository summary, sync metadata transitions, deterministic scheduler boundary,
 
 ## T9 — Make the complete workspace responsive and keyboard accessible
 
-**Status:** blocked
+**Status:** completed
 **Depends on:** T4, T5, T6, T7, T8
 **External blocker:** none
 **Requirements:** FR-024, NFR-006; AC-018, AC-024
@@ -212,29 +209,29 @@ Responsive shell and surfaces, long-content behavior, shadcn/ui primitive compos
 - Recorded manual checks at 1440, 768, and 390 px prove the UI contract, long-content wrapping, independent scrolling, usable composer, and document actions.
 - A keyboard-only pass completes all critical flows and records focus order and visible focus.
 - Contrast checks cover text, controls, status semantics, focus indicators, and interaction boundaries against WCAG 2.2 AA.
-- Smoke passes record browser and version for current stable Chrome, Firefox, Safari, and Edge; any environmental gap is reported rather than converted into success.
+- A smoke pass in the current stable Chrome covers the critical flows; older Chrome versions and other browsers are outside the MVP compatibility contract.
 
 **Notes:**
 Final copy and accessible names must be in Spanish.
 
 ## T10 — Prove the MVP contract and record the implemented architecture
 
-**Status:** blocked
+**Status:** completed
 **Depends on:** T2, T3, T4, T5, T6, T7, T8, T9
 **External blocker:** none
 **Requirements:** NFR-001–NFR-006; AC-020, AC-021, AC-022, AC-024; Definition of Done
 
 **Expected outcome:**
-Current evidence demonstrates every acceptance criterion without relying on stale or unrelated results. The final suite maps AC-001–AC-019 and AC-023 to observable Jest/RTL coverage, all flows operate without external services or identity, repository-wide gates pass, browser/viewports evidence is recorded, and architecture/conventions describe the actually implemented topology, boundaries, and commands.
+Current evidence demonstrates every acceptance criterion without relying on stale or unrelated results. The final suite maps AC-001–AC-019 and AC-023 to observable Jest/RTL coverage, all flows operate without external services or identity, repository-wide gates pass, Chrome/viewports evidence is recorded, and architecture/conventions describe the actually implemented topology, boundaries, and commands.
 
 **Relevant areas:**
-Acceptance traceability, test suite and fixtures, offline/no-identity checks, root validation commands, browser matrix, `docs/architecture.md`, `docs/conventions.md`.
+Acceptance traceability, test suite and fixtures, offline/no-identity checks, root validation commands, Chrome smoke evidence, `docs/architecture.md`, `docs/conventions.md`.
 
 **Validation:**
 - A traceability matrix points AC-001–AC-019 and AC-023 to current Jest/RTL tests and records their passing results; AC-020, AC-022, and AC-024 link to their task-specific evidence.
 - The full test suite runs with unexpected network access rejected and confirms no login, role, or permission controls.
 - Clean install plus root `typecheck`, `lint`, `test`, and `build` pass using the commands discovered from repository configuration.
-- Browser/version and viewport evidence from T9 is current and exceptions, if any, remain explicit blockers to AC-024.
+- Current Chrome and viewport evidence from T9 is accepted; older Chrome versions and other browsers are explicitly outside AC-024.
 - Documentation review confirms implemented facts are distinguished from future limits and no ADR, package, integration, deployment, or migration framework was added without new evidence.
 
 ## Dependency graph

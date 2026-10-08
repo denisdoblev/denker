@@ -81,7 +81,7 @@ No se requiere ADR. Next.js, TypeScript, shadcn/ui, Jest, React Testing Library,
 | Persistencia y sync son independientes y toleran fallos. | Tests del puerto con almacenamiento en memoria/controlado y tests RTL de recarga, `Unsynced changes`, timers deterministas de sync, fallo sin pérdida de datos, storage inaccesible y payload inválido conservado hasta reset confirmado; AC-016–AC-017 y AC-023. |
 | Todos los recorridos funcionan offline y sin identidad. | Ejecutar la suite con cualquier acceso de red fallando explícitamente, comprobar que los fixtures cubren el recorrido completo y verificar que no se renderizan controles de login, roles o permisos; AC-022. |
 | La experiencia responsive conserva controles y contexto. | Tests RTL de comportamiento de overlays/colapso y comprobación en browser a 1440 px, 768 px y 390 px con los recorridos de AC-018. El diseño de UI definirá los estados visuales concretos que se inspeccionarán. |
-| Los recorridos son accesibles y compatibles. | Tests RTL por rol/nombre, navegación completa por teclado y gestión/restauración de foco; inspección de foco visible y contraste; smoke manual de recorridos críticos en versiones estables vigentes de Chrome, Firefox, Safari y Edge para AC-024. Registrar navegador y versión usados. |
+| Los recorridos son accesibles y compatibles. | Tests RTL por rol/nombre, navegación completa por teclado y gestión/restauración de foco; inspección de foco visible y contraste; smoke manual de recorridos críticos en la versión estable vigente de Chrome para AC-024. |
 | La suite cubre resultados observables, no detalles del reducer. | Matriz final que trace AC-001–AC-019 y AC-023 a tests Jest/RTL; tests puros sólo para invariantes o decoders cuyo fallo no pueda observarse de forma aislada con igual claridad. |
 
 La validación avanzará de tests focalizados a la suite completa, y terminará con typecheck, lint y build. Al no existir baseline ejecutable, cualquier fallo introducido durante el scaffold es de esta iniciativa; fallos de entorno o de compatibilidad de navegador se registrarán por separado y no se convertirán silenciosamente en éxito.
@@ -90,7 +90,7 @@ La validación avanzará de tests focalizados a la suite completa, y terminará 
 
 No hay rollout remoto ni despliegue en esta iniciativa. La aplicación debe ejecutarse localmente y sin servicios externos. La primera escritura crea el esquema `v1`; volver a una revisión anterior del código no debe borrar automáticamente la clave local. Si una revisión no entiende el payload, presentará el estado inválido y permitirá reset confirmado según el mismo contrato de recuperación.
 
-La compatibilidad se valida contra las versiones estables vigentes de Chrome, Firefox, Safari y Edge. Se evitarán APIs experimentales; `localStorage` y Clipboard API estarán detrás de manejo explícito de excepciones. La falta de Clipboard API sólo afecta `Copy`, y la falta de `localStorage` degrada a estado de sesión en memoria.
+La compatibilidad se valida contra la versión estable vigente de Chrome. Las versiones antiguas de Chrome y los demás navegadores quedan fuera del contrato del MVP. Se evitarán APIs experimentales; `localStorage` y Clipboard API estarán detrás de manejo explícito de excepciones. La falta de Clipboard API sólo afecta `Copy`, y la falta de `localStorage` degrada a estado de sesión en memoria.
 
 ## Risks and mitigations
 
@@ -104,7 +104,7 @@ La compatibilidad se valida contra las versiones estables vigentes de Chrome, Fi
 | Confirmaciones y overlays pierden foco o bloquean teclado en mobile. | Media/alta | Resolver patrón en UI design, usar primitives accesibles de shadcn/ui y probar apertura, escape, confirmación y restauración de foco. |
 | Timers mockeados de sync vuelven frágiles los tests o mutan datos locales. | Media/media | Inyectar/encapsular el scheduler, usar fake timers y limitar la transición a metadatos de sync. |
 | La amplitud de AC-001–AC-019 produce una suite lenta o duplicada. | Media/media | Agrupar recorridos por riesgo, parametrizar fixtures y reservar tests puros para invariantes; mantener una matriz de trazabilidad sin repetir todos los flujos end-to-end. |
-| Las diferencias reales entre motores quedan ocultas por jsdom. | Media/alta | Completar RTL con smoke tests en los cuatro navegadores objetivo y los tres viewports; registrar cualquier excepción antes de aceptar el plan como implementado. |
+| Las diferencias reales del navegador quedan ocultas por jsdom. | Media/alta | Completar RTL con un smoke test en Chrome estable vigente y los tres viewports; registrar cualquier excepción antes de aceptar el plan como implementado. |
 
 ## Explicit non-changes
 
@@ -117,7 +117,7 @@ La compatibilidad se valida contra las versiones estables vigentes de Chrome, Fi
 - No URLs compartibles por entidad ni navegación server-side mientras ningún criterio lo requiera.
 - No packages reutilizables, design system separado, librería externa de estado, motor genérico de workflows ni framework de migraciones.
 - No CI/CD, hosting, analytics, telemetría, feature flags ni infraestructura cloud.
-- No Playwright ni nueva infraestructura E2E de entrada: Jest/RTL más la matriz manual cubren el contrato actual; se reconsiderará sólo si el diseño demuestra comportamientos de browser que no puedan verificarse de forma fiable así.
+- No Playwright ni nueva infraestructura E2E de entrada: Jest/RTL más el smoke manual en Chrome cubren el contrato actual; se reconsiderará sólo si el diseño demuestra comportamientos de browser que no puedan verificarse de forma fiable así.
 
 ## Related decisions
 

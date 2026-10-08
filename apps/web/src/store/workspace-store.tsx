@@ -27,6 +27,7 @@ type RuntimeAction =
   | { type: "hydrate"; workspace: WorkspaceState }
   | { type: "invalid" }
   | { type: "replace"; workspace: WorkspaceState }
+  | { type: "transition"; transition: (workspace: WorkspaceState) => WorkspaceState }
   | { type: "reset" };
 
 const initialRuntimeState: RuntimeState = {
@@ -45,6 +46,11 @@ function runtimeReducer(
       return { ...state, hydrationStatus: "invalid" };
     case "replace":
       return { hydrationStatus: "ready", workspace: action.workspace };
+    case "transition":
+      return {
+        hydrationStatus: "ready",
+        workspace: action.transition(state.workspace),
+      };
     case "reset":
       return { hydrationStatus: "ready", workspace: createEmptyWorkspace() };
   }
@@ -52,6 +58,7 @@ function runtimeReducer(
 
 interface WorkspaceContextValue extends RuntimeState {
   replaceWorkspace: (workspace: WorkspaceState) => void;
+  transitionWorkspace: (transition: (workspace: WorkspaceState) => WorkspaceState) => void;
   resetWorkspace: () => Promise<void>;
 }
 
@@ -102,6 +109,13 @@ export function WorkspaceProvider({
     dispatch({ type: "replace", workspace });
   }, []);
 
+  const transitionWorkspace = useCallback(
+    (transition: (workspace: WorkspaceState) => WorkspaceState) => {
+      dispatch({ type: "transition", transition });
+    },
+    [],
+  );
+
   const resetWorkspace = useCallback(async () => {
     const emptyWorkspace = createEmptyWorkspace();
     try {
@@ -114,8 +128,8 @@ export function WorkspaceProvider({
   }, [persistence]);
 
   const value = useMemo(
-    () => ({ ...runtime, replaceWorkspace, resetWorkspace }),
-    [replaceWorkspace, resetWorkspace, runtime],
+    () => ({ ...runtime, replaceWorkspace, transitionWorkspace, resetWorkspace }),
+    [replaceWorkspace, resetWorkspace, runtime, transitionWorkspace],
   );
 
   return (
