@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -11,6 +12,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from sdd.runner.sdd_cycle import (
@@ -22,6 +24,7 @@ from sdd.runner.sdd_cycle import (
     OperationalStop,
     TaskArtifact,
     atomic_write_text,
+    parse_codex_jsonl,
     validate_semantics,
 )
 
@@ -89,10 +92,12 @@ class FakeExecutor(Executor):
         *,
         mutate_repairs: bool = True,
         mcp_servers: list[str] | None = None,
+        jsonl_stdout: str | None = None,
     ):
         self.responses = list(responses)
         self.mutate_repairs = mutate_repairs
         self.mcp_servers = mcp_servers or ["serena"]
+        self.jsonl_stdout = jsonl_stdout
         self.calls: list[tuple[list[str], str | None]] = []
         self.change_number = 0
 
@@ -158,7 +163,22 @@ class FakeExecutor(Executor):
         if phase == "REPAIR" and response.get("result") == "PASS" and self.mutate_repairs:
             self._mutate(cwd, "repair")
         output.write_text(json.dumps(response), encoding="utf-8")
-        return CommandResult(0, json.dumps(response), "bounded diagnostics")
+        events = [
+            {"type": "thread.started", "thread_id": "test-thread"},
+            {
+                "type": "turn.completed",
+                "usage": {
+                    "input_tokens": 100,
+                    "cached_input_tokens": 40,
+                    "output_tokens": 20,
+                    "reasoning_output_tokens": 5,
+                },
+            },
+        ]
+        stdout = self.jsonl_stdout if self.jsonl_stdout is not None else "\n".join(
+            json.dumps(event) for event in events
+        )
+        return CommandResult(0, stdout, "bounded diagnostics")
 
     @staticmethod
     def assert_phase(expected: str, actual: str) -> None:
@@ -229,6 +249,7 @@ class RunnerTestCase(unittest.TestCase):
         task_id: str | None = None,
         max_repairs: int = 3,
         dry_run: bool = False,
+        context_mode: str = "direct",
     ) -> CycleRunner:
         return CycleRunner(
             repo_root=self.repo,
@@ -237,8 +258,231 @@ class RunnerTestCase(unittest.TestCase):
             max_repairs=max_repairs,
             runs_dir=self.base / "runs",
             dry_run=dry_run,
+            context_mode=context_mode,
             executor=executor,
         )
+
+    def test_jsonl_parser_extracts_usage_without_retaining_event_payloads(self) -> None:
+        stdout = "\n".join(
+            [
+                json.dumps({"type": "thread.started", "thread_id": "secret-thread"}),
+                json.dumps(
+                    {
+                        "type": "turn.completed",
+                        "usage": {
+                            "input_tokens": 120,
+                            "cached_input_tokens": 70,
+                            "output_tokens": 30,
+                            "reasoning_output_tokens": 9,
+                        },
+                    }
+                ),
+            ]
+        )
+        metrics = parse_codex_jsonl(stdout)
+        self.assertEqual("complete", metrics["status"])
+        self.assertEqual(120, metrics["usage"]["input_tokens"])
+        self.assertEqual(1, metrics["other_event_count"])
+        self.assertNotIn("secret-thread", json.dumps(metrics))
+
+    def test_jsonl_parser_tolerates_incomplete_unknown_and_malformed_events(self) -> None:
+        stdout = "\n".join(
+            [
+                "not-json",
+                json.dumps({"unexpected": True}),
+                json.dumps(
+                    {
+                        "type": "turn.completed",
+                        "usage": {"input_tokens": 10, "cached_input_tokens": 4, "output_tokens": 2},
+                    }
+                ),
+            ]
+        )
+        metrics = parse_codex_jsonl(stdout)
+        self.assertEqual("partial", metrics["status"])
+        self.assertEqual(1, metrics["malformed_event_count"])
+        self.assertEqual(1, metrics["unknown_event_count"])
+        self.assertEqual(["reasoning_output_tokens"], metrics["missing_usage_fields"])
+
+    def test_cycle_aggregates_direct_mode_usage_and_duration(self) -> None:
+        self.write_tasks([("T1", "ready", "none", "none")])
+        self.commit()
+        fake = FakeExecutor([("IMPLEMENT", implement()), ("REVIEW", review()), ("VALIDATE", validation())])
+        runner = self.runner(fake, task_id="T1")
+        self.assertEqual(0, runner.run())
+        telemetry = runner.summary["telemetry"]
+        self.assertEqual("direct", telemetry["context_mode"])
+        self.assertEqual(3, telemetry["execution_count"])
+        self.assertEqual(3, telemetry["executions_with_usage"])
+        self.assertEqual(300, telemetry["token_usage"]["input_tokens"])
+        self.assertEqual(100, telemetry["by_phase"]["IMPLEMENT"]["token_usage"]["input_tokens"])
+        self.assertGreaterEqual(telemetry["duration_seconds"], 0)
+        self.assertTrue(all("--json" in item["argv"] for item in runner.summary["executions"]))
+
+    def test_cycle_continues_when_jsonl_usage_is_unavailable(self) -> None:
+        self.write_tasks([("T1", "ready", "none", "none")])
+        self.commit()
+        fake = FakeExecutor(
+            [("IMPLEMENT", implement()), ("REVIEW", review()), ("VALIDATE", validation())],
+            jsonl_stdout='{"future.event": true}\nnot-json',
+        )
+        runner = self.runner(fake, task_id="T1")
+        self.assertEqual(0, runner.run())
+        telemetry = runner.summary["telemetry"]
+        self.assertEqual(0, telemetry["executions_with_usage"])
+        self.assertEqual(3, telemetry["executions_without_usage"])
+
+    def test_local_assisted_mode_is_opt_in_implement_only_and_preserves_decision_model(self) -> None:
+        self.write_tasks([("T1", "ready", "none", "none")])
+        self.commit()
+        fake = FakeExecutor([("IMPLEMENT", implement()), ("REVIEW", review()), ("VALIDATE", validation())])
+        runner = self.runner(fake, task_id="T1", context_mode="local-assisted")
+        packet = {
+            "schema_version": "3",
+            "status": "ok",
+            "technical_status": "ok",
+            "coverage": {"status": "sufficient", "reasons": [], "omitted_high_signal": []},
+            "task": "task",
+            "summary": "summary",
+            "sources": [],
+            "relevant_files": [],
+            "facts": [],
+            "inferences": [],
+            "relationships": [],
+            "uncertainties": [],
+            "recommended_reads": [],
+            "search_trace": [],
+            "fallback_reason": None,
+            "metrics": {"files_read": 2, "source_tokens": 321, "errors": []},
+        }
+        with mock.patch.object(runner, "_prepare_local_assisted_context", return_value=packet) as prepare:
+            self.assertEqual(0, runner.run())
+        prepare.assert_called_once()
+        phase_prompts = {
+            next(line.split(": ", 1)[1] for line in prompt.splitlines() if line.startswith("SDD_RUNNER_PHASE:")): prompt
+            for argv, prompt in fake.calls
+            if prompt and argv[:4] == ["codex", "--ask-for-approval", "never", "exec"]
+        }
+        self.assertIn("Auxiliary context packet", phase_prompts["IMPLEMENT"])
+        self.assertNotIn("Auxiliary context packet", phase_prompts["REVIEW"])
+        self.assertNotIn("Auxiliary context packet", phase_prompts["VALIDATE"])
+        self.assertTrue(all(item["model"] == MODEL for item in runner.summary["executions"]))
+        self.assertEqual(1, runner.summary["telemetry"]["local_assisted_implementations"])
+        self.assertEqual(2, runner.summary["telemetry"]["local_context"]["files_read"])
+        self.assertEqual(321, runner.summary["telemetry"]["local_context"]["source_tokens"])
+
+    def test_local_assisted_preprocessor_failure_falls_back_without_stopping_runner(self) -> None:
+        self.write_tasks([("T1", "ready", "none", "none")])
+        self.commit()
+        fake = FakeExecutor([("IMPLEMENT", implement()), ("REVIEW", review()), ("VALIDATE", validation())])
+        runner = self.runner(fake, task_id="T1", context_mode="local-assisted")
+        fallback = {
+            "schema_version": "3",
+            "status": "fallback_required",
+            "technical_status": "fallback_required",
+            "coverage": {"status": "unknown", "reasons": ["Ollama unavailable"], "omitted_high_signal": []},
+            "fallback_reason": "Ollama unavailable",
+            "metrics": {"errors": ["Ollama unavailable"]},
+        }
+        with mock.patch.object(runner, "_prepare_local_assisted_context", return_value=fallback):
+            self.assertEqual(0, runner.run())
+        self.assertEqual(1, runner.summary["telemetry"]["direct_fallbacks"])
+        implement_prompt = next(
+            prompt for argv, prompt in fake.calls if prompt and "SDD_RUNNER_PHASE: IMPLEMENT" in prompt
+        )
+        self.assertNotIn("Auxiliary context packet", implement_prompt)
+
+    def test_local_assisted_technical_ok_with_partial_coverage_is_not_injected(self) -> None:
+        self.write_tasks([("T1", "ready", "none", "none")])
+        self.commit()
+        fake = FakeExecutor([("IMPLEMENT", implement()), ("REVIEW", review()), ("VALIDATE", validation())])
+        runner = self.runner(fake, task_id="T1", context_mode="local-assisted")
+        packet = {
+            "schema_version": "3",
+            "status": "ok",
+            "technical_status": "ok",
+            "coverage": {
+                "status": "partial",
+                "reasons": ["high-signal candidate omitted"],
+                "omitted_high_signal": ["src/worker.ts"],
+            },
+            "metrics": {"errors": []},
+        }
+        with mock.patch.object(runner, "_prepare_local_assisted_context", return_value=packet):
+            self.assertEqual(0, runner.run())
+        self.assertEqual(1, runner.summary["telemetry"]["direct_fallbacks"])
+        implement_prompt = next(
+            prompt for argv, prompt in fake.calls if prompt and "SDD_RUNNER_PHASE: IMPLEMENT" in prompt
+        )
+        self.assertNotIn("Auxiliary context packet", implement_prompt)
+
+    def test_local_assisted_subprocess_accepts_only_ok_current_hash_contract(self) -> None:
+        self.write_tasks([("T1", "ready", "none", "none")])
+        self.commit()
+        runner = self.runner(FakeExecutor([]), task_id="T1", context_mode="local-assisted")
+        packet = {
+            "schema_version": "3",
+            "status": "ok",
+            "technical_status": "ok",
+            "coverage": {"status": "sufficient", "reasons": [], "omitted_high_signal": []},
+            "task": "task",
+            "summary": "summary",
+            "sources": [{"path": "work.txt", "sha256": "0" * 64}],
+            "relevant_files": [],
+            "facts": [],
+            "inferences": [],
+            "relationships": [],
+            "uncertainties": [],
+            "recommended_reads": [],
+            "search_trace": [],
+            "metrics": {"errors": []},
+            "fallback_reason": None,
+        }
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(packet), stderr="")
+        with mock.patch("sdd.runner.sdd_cycle.subprocess.run", return_value=completed) as run:
+            result = runner._prepare_local_assisted_context(runner.artifact.tasks[0])
+        self.assertEqual("fallback_required", result["status"])
+        self.assertIn("hash changed", result["fallback_reason"])
+        argv = run.call_args.args[0]
+        self.assertIn("sdd/context/local_agent.py", argv[1])
+        self.assertIn("analyze", argv)
+
+    def test_local_assisted_subprocess_non_ok_is_not_injected(self) -> None:
+        self.write_tasks([("T1", "ready", "none", "none")])
+        self.commit()
+        runner = self.runner(FakeExecutor([]), task_id="T1", context_mode="local-assisted")
+        packet = {
+            "schema_version": "3", "status": "partial", "technical_status": "ok",
+            "coverage": {"status": "partial", "reasons": ["coverage gap"], "omitted_high_signal": []},
+            "metrics": {"errors": []},
+        }
+        completed = subprocess.CompletedProcess([], 1, stdout=json.dumps(packet), stderr="bounded error")
+        with mock.patch("sdd.runner.sdd_cycle.subprocess.run", return_value=completed):
+            result = runner._prepare_local_assisted_context(runner.artifact.tasks[0])
+        self.assertEqual("partial", result["status"])
+
+    def test_local_assisted_subprocess_rejects_invalid_citation_contract(self) -> None:
+        self.write_tasks([("T1", "ready", "none", "none")])
+        self.commit()
+        runner = self.runner(FakeExecutor([]), task_id="T1", context_mode="local-assisted")
+        digest = hashlib.sha256((self.repo / "work.txt").read_bytes()).hexdigest()
+        packet = {
+            "schema_version": "3", "status": "ok", "technical_status": "ok",
+            "coverage": {"status": "sufficient", "reasons": [], "omitted_high_signal": []},
+            "task": "task", "summary": "summary",
+            "sources": [{"path": "work.txt", "sha256": digest}], "relevant_files": [],
+            "facts": [{
+                "statement": "invented", "classification": "observed",
+                "citations": [{"path": "work.txt", "start_line": 2, "end_line": 2}],
+            }],
+            "inferences": [], "relationships": [], "uncertainties": [], "recommended_reads": [],
+            "search_trace": [], "metrics": {"errors": []}, "fallback_reason": None,
+        }
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(packet), stderr="")
+        with mock.patch("sdd.runner.sdd_cycle.subprocess.run", return_value=completed):
+            result = runner._prepare_local_assisted_context(runner.artifact.tasks[0])
+        self.assertEqual("fallback_required", result["status"])
+        self.assertIn("citation is invalid", result["fallback_reason"])
 
     def test_parser_rejects_missing_external_blocker_before_mutation(self) -> None:
         path = self.write_tasks([("T1", "ready", "none", "none")])
@@ -679,7 +923,7 @@ class FakeCodexSmokeTest(unittest.TestCase):
                         result = {"scope": scope, "verdict": "PASS", "action": "NONE", "checks": [{"name": "smoke", "status": "PASS", "evidence": "fake process"}], "evidence": ["fake smoke"], "remaining_delta": [], "decision_required": None}
                     output.write_text(json.dumps(result))
                     state_path.write_text(json.dumps(state))
-                    print(json.dumps(result))
+                    print(json.dumps({"type": "turn.completed", "usage": {"input_tokens": 100, "cached_input_tokens": 40, "output_tokens": 20, "reasoning_output_tokens": 5}}))
                     """
                 ),
                 encoding="utf-8",

@@ -17,6 +17,26 @@ Use the cheapest evidence that can resolve the current question, in this order:
 
 Stop as soon as the evidence is sufficient. Do not read an entire documentation tree, repository, or Skill collection by default. Follow links selectively and prefer the nearest scoped source. Use architecture, ADRs, conventions, glossary, and active artifacts only when their subject can constrain the work.
 
+### Local-assisted context routing
+
+`local-assisted` is optional evidence preparation, not delegated judgment. The repository and accepted artifacts remain authoritative. Route in this order:
+
+1. Keep `direct` as the default and use it for known bounded sources, exact-text work, specs, authority documents, templates, Skills, and SDD contracts.
+2. When explicitly requested, enumerate with `git ls-files` and fall back to `rg --files`; search explicit paths, terms, and meaningful words with `rg`.
+3. If deterministic anchors are insufficient, the local model may suggest at most eight terms and six paths. Retain only existing paths and terms that produce deterministic repository matches.
+4. Expand bounded candidates through local imports/references and related tests. Rank explicit paths and independent signals before weaker matches.
+5. Read files up to 400 lines completely. For larger files, use ±80-line ranges around evidence and merge gaps of at most 20 lines.
+6. Classify candidates structurally and choose a dynamic implementation frontier of two to four files, stopping weak score tails. Target 14K selected source tokens while retaining the 20K hard ceiling; reserve 80% of the target for implementation and cap oversized excerpts around distributed anchors. Complete the packet only when a candidate adds a new import/reference/related-test edge or is explicit, cap each completion excerpt at 2K, and match related tests by exact source stem. Lexical coincidence alone is insufficient. Send at most twelve files and 21K estimated source tokens to Ollama, split across at most three 7K-token batches. Authority documents remain recommended direct reads and are never sent to Ollama.
+7. Give every Ollama excerpt a closed ID and require the model to cite only those IDs; translate IDs to repository path and full inclusive excerpt range deterministically before producing the external packet. Treat `technical_status=ok` only as successful execution and a valid local contract. Report coverage separately as `sufficient`, `partial`, or `unknown`; `sufficient` is a conservative runtime heuristic, not a benchmark-quality guarantee. The runner injects a packet only when technical status is `ok` and coverage is `sufficient`. Timeouts, invalid IDs/contracts/citations/paths/ranges, changed hashes, tool errors, or partial/unknown coverage fall back immediately to `direct`.
+
+The packet records search commands and counts, selected paths/ranges/reasons, source hashes, cited facts and inferences, recommended direct reads, errors, and observed timings/bytes/tokens. It never persists prompts, source excerpts, model reasoning, or counterfactual savings. The local model may only discover, read, and synthesize factual evidence. Only the configured Codex decision model interprets requirements, makes decisions, edits, reviews, validates, or issues a verdict.
+
+The bounded runner applies opt-in `local-assisted` only before `IMPLEMENT`; `REPAIR`, `REVIEW`, and `VALIDATE` remain direct. Experimental gates are required recall ≥95% per case, aggregate precision ≥90%, zero invalid citations or critical omissions, quality delta no worse than −5 points per case, correct repair in both modes, fallback ≤25%, median cloud-input reduction ≥40%, and non-negative savings in at least three of four paired cases. A quality failure rejects the experiment; passing quality without utility is safe but not useful. No result changes the default automatically.
+
+The following tasks must never be delegated to the local preprocessor: ambiguous requirement interpretation; product or scope decisions; architecture or trade-offs; security, permissions, or privacy; concurrency, transactions, migrations, or compatibility; public contracts or protocols; final causal diagnosis; fix selection; writing or applying changes; final review; or validation verdicts.
+
+Before using local-assisted evidence, directly read every authority contract and every cited range that affects an edit or material decision. An invented path, symbol, or range invalidates the whole packet. A changed source hash forces direct fallback. Evidence-free claims are uncertainties. Local-assisted evidence never replaces an exact diff, source contract, or real validation command.
+
 ## Tool selection policy
 
 Choose the least costly reliable source for the claim. Prefer deterministic local CLI and repository evidence to persistent services. Use MCP only when its unique semantics or data justify its tool and context surface. Optional tools must have a native fallback and must be discovered from the consumer project; `$sdd-init` never installs them automatically.
@@ -24,7 +44,8 @@ Choose the least costly reliable source for the claim. Prefer deterministic loca
 | Class | Tool | Trigger | Anti-trigger and fallback |
 | --- | --- | --- | --- |
 | Base | `git`, `rg`, range reads | State, diff, file discovery, known text, or focused inspection is relevant. | Do not run Git rituals without an evidentiary question. Use filesystem and direct reads when Git has no useful baseline. |
-| Optional | Graphify | A current graph already exists and architecture, cross-cutting impact, boundaries, or conceptual paths justify a budgeted query. | Do not build a graph automatically or use it for local changes. Fall back to architecture/ADRs, `rg`, and focused reads. |
+| Optional | Graphify | A human explicitly chooses its standalone CLI for manual exploration. It is not part of context routing or the runner. | Do not install its adapter, MCP, hooks, rebuild it silently, or inject its output automatically. Keep `graphify-out/` ignored and fall back to `rg` and focused reads. |
+| Optional | Ollama local agent | Explicit `local-assisted` discovery benefits from cited compression and `qwen3:8b` is already available. | Never delegate decisions, edits, review, or verdicts. Enforce the v3 packet contract (with the internal v2 bulk-reader request), separate technical and coverage status, path/hash/range checks, three 7K-token batches, 21K source tokens, 90 seconds total, and direct fallback. |
 | Optional | Serena | A large codebase needs semantic references, cross-file navigation, or focused work in long source files. Prefer a low-surface interface when stable. | Do not add it to small or documentation-only repositories or duplicate shell, search, or memory. Fall back to `rg` and ranges. |
 | Optional | Context7 | A versioned library contract, recent API, or breaking change cannot be established locally. Prefer CLI plus Skill if adopted. | Do not use for basic concepts or locally evidenced behavior. Fall back to targeted official documentation. |
 | Optional | dependency-cruiser | A JS/TS project has documented import boundaries and an architecture/import change needs enforcement. | Do not invent boundary rules or use it universally. Fall back to existing import tests, build, and architecture review. |

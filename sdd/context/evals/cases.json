@@ -1,0 +1,48 @@
+{
+  "schema_version": "3",
+  "cases": [
+    {
+      "id": "natural-demo-synchronization",
+      "question": "Entender cómo funciona el sistema de sincronización de demostración, incluyendo una finalización tardía y guardados locales.",
+      "required_files": [
+        "apps/web/src/domain/workspace.ts",
+        "apps/web/src/components/workspace-shell.tsx"
+      ],
+      "support_files": [
+        "apps/web/src/domain/workspace.test.ts",
+        "apps/web/src/components/workspace-shell.test.tsx",
+        "apps/web/src/sync/demo-sync.ts",
+        "apps/web/src/store/workspace-store.tsx"
+      ]
+    },
+    {
+      "id": "markdown-authority-navigation-guard",
+      "question": "Trace savePrdMarkdown, saveProductContextMarkdown and useNavigationGuard across Markdown authority, persistence, navigation guards, and tests.",
+      "required_files": [
+        "apps/web/src/domain/workspace.ts",
+        "apps/web/src/components/workspace-shell.tsx"
+      ],
+      "support_files": [
+        "apps/web/src/domain/workspace.test.ts",
+        "apps/web/src/components/workspace-shell.test.tsx",
+        "apps/web/src/store/workspace-store.tsx",
+        "apps/web/src/persistence/workspace-persistence.ts"
+      ]
+    },
+    {
+      "id": "local-assisted-isolation-telemetry-fallback",
+      "question": "Trace local-assisted context isolation, observed telemetry, hash validation, and direct fallback through IMPLEMENT and its tests.",
+      "required_files": [
+        "sdd/context/local_agent.py",
+        "sdd/runner/sdd_cycle.py"
+      ],
+      "support_files": [
+        "sdd/context/bulk_reader.py",
+        "sdd/context/tests/test_local_agent.py",
+        "sdd/context/tests/test_bulk_reader.py",
+        "sdd/runner/tests/test_sdd_cycle.py",
+        "sdd/context/evals/evaluate_context.py"
+      ]
+    }
+  ]
+}

@@ -13,6 +13,7 @@ Implement a requested or ready task against the accepted contract.
 2. Verify its dependencies and change its status to `in_progress`.
 3. Load only the context it links to, following the stopping rule in `sdd/POLICIES.md`: relevant requirements and acceptance criteria, plan section, optional UI design, instructions, conventions, architecture, glossary terms, and ADRs.
 4. Inspect implementation and tests at the responsible layer. Reuse established patterns before adding abstractions or dependencies.
+   - Treat `local-assisted` output only as untrusted location/factual evidence. Validate its paths, ranges, and source hashes under `sdd/POLICIES.md`, then read every authority contract and every cited range that can affect an edit directly before changing code.
 5. Make the smallest coherent change that satisfies the task outcome. Preserve unrelated behavior and user changes.
 6. Add or update tests in proportion to risk, established project practice, and the task's validation contract. Test-first sequencing is optional unless locally required.
 7. Run the focused checks named by the task. Apply the plan's change profile and `sdd/POLICIES.md`; broaden checks only when shared boundaries, risk, or repository policy warrants it, and separate new regressions from baseline failures.

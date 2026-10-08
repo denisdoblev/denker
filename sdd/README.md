@@ -110,9 +110,31 @@ Each task must include `**External blocker:** none | <reason>`. The runner rejec
 
 The model policy is fixed: `gpt-5.6-sol` with `xhigh` for REVIEW and `medium` elsewhere. Preflight verifies the installed catalog before `ready → in_progress`; no alternate model, downgrade, resume, or fork is allowed. Runs use explicit sandbox and approval settings, structured output schemas, ephemeral sessions, disabled network/search and optional agent integrations, and an explicit empty MCP configuration override. Preflight still records every locally discovered MCP server in the audit summary.
 
-Audit checkpoints live under the Git-ignored `sdd/runner/runs/` by default. A custom audit root cannot overlap tracked content, and only the directory allocated for the current run is omitted from repository snapshots. Checkpoints contain bounded diagnostics, structured results, declared-versus-actual file deltas, policy and repository fingerprints, repair counts, stop reason, and final state—not full transcripts. Validation must leave tracked and non-ignored files unchanged. An interrupted or failed active task remains `in_progress`; v1 requires a human to reconcile that state before another run. A full cycle ends with feature-scope validation, and any failure there is escalated without reopening a task automatically.
+Audit checkpoints live under the Git-ignored `sdd/runner/runs/` by default. A custom audit root cannot overlap tracked content, and only the directory allocated for the current run is omitted from repository snapshots. Checkpoints contain bounded diagnostics, structured results, declared-versus-actual file deltas, policy and repository fingerprints, repair counts, stop reason, and final state—not full transcripts. The runner requests Codex JSONL events and records per-execution duration plus input, cached input, output, and reasoning token counts from `turn.completed`; incomplete or unknown event shapes are marked as partial or unavailable without failing the task. Run-level and per-phase totals keep `context_mode: direct` as the baseline and never persist the JSONL event stream. `--context-mode local-assisted` is an explicit experiment before `IMPLEMENT` only; it never changes the fixed `gpt-5.6-sol` decision model, and `REPAIR`, `REVIEW`, and `VALIDATE` remain direct. Only a technically valid packet with `coverage.status=sufficient` is injected; all other local outcomes fall back to direct execution without failing the cycle. Validation must leave tracked and non-ignored files unchanged. An interrupted or failed active task remains `in_progress`; v1 requires a human to reconcile that state before another run. A full cycle ends with feature-scope validation, and any failure there is escalated without reopening a task automatically.
 
-Public options are `--tasks`, `--task`, `--max-repair-cycles` (default `3`), `--runs-dir`, and `--dry-run`. Exit codes are `0` for success or a valid dry-run, `1` for a safe operational stop, and `2` for invalid usage or artifact configuration.
+Public options are `--tasks`, `--task`, `--max-repair-cycles` (default `3`), `--runs-dir`, `--context-mode direct|local-assisted`, `--context-model` (default `qwen3:8b`), and `--dry-run`. Exit codes are `0` for success or a valid dry-run, `1` for a safe operational stop, and `2` for invalid usage or artifact configuration.
+
+### Optional local-assisted context
+
+The opt-in path is a derived-evidence pipeline:
+
+```text
+task → git/rg discovery → bounded local expansion → Ollama factual reader → cited packet → GPT-5.6 Sol
+```
+
+`local_agent.py` enumerates tracked and non-ignored files, searches explicit paths and meaningful terms, optionally accepts a bounded local expansion, and follows local imports/references and related tests. It classifies candidates as implementation/source, tests, docs, config/schema, or support/other and chooses a dynamic two-to-four-file implementation frontier. Selection targets 14K source tokens under the unchanged 20K hard ceiling, reserves 80% for implementation, and caps oversized excerpts around distributed anchors. Remaining capacity accepts only explicit paths or candidates adding a new import, reference, or exact-stem related-test edge; each completion excerpt is capped at 2K and lexical coincidence alone does not consume budget. The final Ollama request remains bounded to twelve files and 21K source tokens. Specs, authority documents, templates, Skills, and SDD contracts are returned as direct-read recommendations and never sent to Ollama.
+
+```text
+python3 sdd/context/local_agent.py analyze --task "Entender cómo funciona la sincronización" --path . [--model qwen3:8b]
+```
+
+The reader uses at most three 7K-token batches with `num_predict=600`, `temperature=0`, `think=false`, and `num_ctx=16384`. Every excerpt receives a closed ID in the JSON Schema; Ollama cites only IDs, and deterministic code translates each ID to the corresponding repository path and full inclusive excerpt range. Paths, ranges, and SHA-256 values are rechecked afterward. One retry is allowed only for transport or invalid JSON and never after a timeout; the entire local stage is limited to 90 seconds. Output v3 separates `technical_status` (execution/contract/citations) from `coverage.status` (a conservative runtime sufficiency heuristic). The legacy aggregate `status` remains for CLI reporting but is not the runner's quality gate. Prompts, source excerpts, and reasoning are not persisted.
+
+Graphify is no longer in the active path. Its existing `graphify-out/` remains ignored and may be used manually through the standalone CLI, but the runner never queries, rebuilds, or injects it.
+
+The bounded evaluation covers three discovery cases and accepts four externally captured paired Codex results (three analyses and one seeded repair). It calculates the quality and utility gates in `sdd/POLICIES.md`; no verdict changes the default automatically.
+
+The 2026-10-07 run is recorded in `sdd/context/evals/results/2026-10-07-local-assisted.json` with verdict `rejected`: discovery failed recall, precision, critical-omission, and fallback gates, so the fail-fast quality rule stopped the Codex and repair pairs before they could produce misleading direct-versus-fallback measurements.
 
 ### Skills
 

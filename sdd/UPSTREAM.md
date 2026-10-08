@@ -2,7 +2,7 @@
 
 Research performed against official upstream repositories on 2026-10-01 and extended with the tool-policy sources listed below on 2026-10-02. This framework synthesizes principles and workflows in original wording; it does not vendor or substantially copy upstream Skills. Relevant repositories were checked under their published licenses; linked material is attribution and decision evidence, not vendored text.
 
-The bounded runner research was verified against current official OpenAI documentation on 2026-10-05.
+The bounded runner research was verified against current official OpenAI documentation on 2026-10-05. The local-assisted contract was reverified on 2026-10-07 against Ollama's official `/api/generate` documentation for JSON Schema output, `think`, generation options, and evaluation metrics.
 
 `openai/skills` is now deprecated. Entries below identify historical material that was inspected; current OpenAI Skill behavior is verified against `openai/codex`, the OpenAI Plugins documentation and repository, and the Agent Skills specification.
 
@@ -247,6 +247,26 @@ Rejected or deferred:
 - Engram plugin/MCP/hooks and any persistent memory provider without a continuity pilot.
 - dependency-cruiser, ast-grep, Knip, Semgrep, Playwright, and Repomix installation where no matching code or product surface exists.
 - Cavecrew/Caveman integration, proxying, compression wrappers, model routing, or subagent orchestration. Independent focused Skills are outside this framework decision.
+
+## Optional local-assisted context experiment
+
+Official sources recorded:
+
+- Ollama, official `/api/generate` contract for JSON-schema `format`, `stream: false`, `think`, generation options, and evaluation metrics.
+- The fixed bounded-runner model contract documented below for `gpt-5.6-sol`.
+
+Adopted:
+
+- A standard-library local agent over `git`, `rg`, and Ollama `qwen3:8b`, bound to localhost, schema-constrained output, factual-only prompts, closed excerpt-ID citations translated deterministically to source ranges, structural budget-aware selection, separate technical/coverage status, twelve-file/21K-token/three-batch/90-second limits, and direct fallback.
+- `--context-mode local-assisted` as an opt-in before runner `IMPLEMENT` only. GPT-5.6 Sol remains the sole model that interprets, decides, edits, reviews, validates, or gives a verdict.
+- Observed search/model/total times, candidates, files, bytes/tokens, packet size, model context, errors, fallbacks, and actual Codex JSONL usage replace counterfactual context-savings estimates.
+
+Rejected:
+
+- Graphify in the active route, its Codex installation, MCP, hooks, clustering, hosted processing, automatic indexing, and silent index rebuilds. Existing ignored output remains available only for manual CLI use.
+- Ollama for requirements, product scope, architecture, security/privacy, compatibility, diagnosis, fix choice, edits, final review, or validation verdicts.
+- Automatic/default local-assisted mode under any experiment result.
+- A local code writer, Caveman/Cavecrew integration, alternate decision-model routing, raw prompt/source persistence, or a second reasoning call to merge batches.
 
 ## Bounded SDD runner
 

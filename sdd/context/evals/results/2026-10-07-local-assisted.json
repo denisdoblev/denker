@@ -1,0 +1,61 @@
+{
+  "schema_version": "1",
+  "experiment": "local-assisted",
+  "date": "2026-10-07",
+  "model": "qwen3:8b",
+  "decision_model": "gpt-5.6-sol",
+  "discovery": {
+    "case_count": 3,
+    "minimum_required_recall": 0.0,
+    "aggregate_precision": 0.44,
+    "fallback_rate": 1.0,
+    "invalid_citations": 0,
+    "critical_omissions": 3,
+    "cases": [
+      {
+        "id": "natural-demo-synchronization",
+        "status": "partial",
+        "required_recall": 1.0,
+        "precision": 0.4444,
+        "files_read": 9,
+        "source_tokens": 18808,
+        "total_duration_seconds": 43.342406
+      },
+      {
+        "id": "markdown-authority-navigation-guard",
+        "status": "partial",
+        "required_recall": 0.5,
+        "precision": 0.3333,
+        "files_read": 12,
+        "source_tokens": 14919,
+        "total_duration_seconds": 42.866011
+      },
+      {
+        "id": "local-assisted-isolation-telemetry-fallback",
+        "status": "partial",
+        "required_recall": 0.0,
+        "precision": 0.75,
+        "files_read": 4,
+        "source_tokens": 19825,
+        "total_duration_seconds": 47.598779
+      }
+    ]
+  },
+  "paired_codex": {
+    "status": "not_run",
+    "reason": "Discovery quality gates already failed; every local-assisted result would fall back to direct and could not measure assisted quality or savings."
+  },
+  "paired_repair": {
+    "status": "not_run",
+    "reason": "Stopped at the mandatory quality gate before mutating temporary repair workspaces."
+  },
+  "gates": {
+    "required_recall_at_least_95_percent_each_case": false,
+    "aggregate_precision_at_least_90_percent": false,
+    "zero_invalid_citations": true,
+    "zero_critical_omissions": false,
+    "fallback_at_most_25_percent": false
+  },
+  "verdict": "rejected",
+  "default_changed": false
+}

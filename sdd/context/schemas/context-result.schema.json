@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://denker.local/sdd/context/context-result.schema.json",
+  "title": "Local-assisted context result v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "status", "technical_status", "coverage", "task", "summary", "sources", "relevant_files",
+    "facts", "inferences", "relationships", "uncertainties", "recommended_reads",
+    "search_trace", "metrics", "fallback_reason"
+  ],
+  "properties": {
+    "schema_version": {"const": "3"},
+    "status": {"enum": ["ok", "partial", "fallback_required"]},
+    "technical_status": {"enum": ["ok", "fallback_required"]},
+    "coverage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "reasons", "omitted_high_signal"],
+      "properties": {
+        "status": {"enum": ["sufficient", "partial", "unknown"]},
+        "reasons": {"type": "array", "items": {"type": "string"}},
+        "omitted_high_signal": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "task": {"type": "string"},
+    "summary": {"type": "string"},
+    "sources": {
+      "type": "array", "maxItems": 12,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "relevant_files": {
+      "type": "array", "maxItems": 12,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["path", "reason", "symbols", "ranges"],
+        "properties": {
+          "path": {"type": "string"}, "reason": {"type": "string"},
+          "symbols": {"type": "array", "items": {"type": "string"}},
+          "ranges": {"type": "array", "items": {"$ref": "#/$defs/range"}}
+        }
+      }
+    },
+    "facts": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "inferences": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "relationships": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "uncertainties": {"type": "array", "items": {"type": "string"}},
+    "recommended_reads": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["path", "reason"],
+        "properties": {"path": {"type": "string"}, "reason": {"type": "string"}}
+      }
+    },
+    "search_trace": {"type": "array", "items": {"type": "object"}},
+    "metrics": {"type": "object"},
+    "fallback_reason": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "range": {
+      "type": "object", "additionalProperties": false, "required": ["start_line", "end_line"],
+      "properties": {
+        "start_line": {"type": "integer", "minimum": 1},
+        "end_line": {"type": "integer", "minimum": 1}
+      }
+    },
+    "citation": {
+      "type": "object", "additionalProperties": false, "required": ["path", "start_line", "end_line"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "start_line": {"type": "integer", "minimum": 1},
+        "end_line": {"type": "integer", "minimum": 1}
+      }
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["statement", "classification", "citations"],
+      "properties": {
+        "statement": {"type": "string", "minLength": 1, "maxLength": 200},
+        "classification": {"enum": ["observed", "inference"]},
+        "citations": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"$ref": "#/$defs/citation"}}
+      }
+    }
+  }
+}
