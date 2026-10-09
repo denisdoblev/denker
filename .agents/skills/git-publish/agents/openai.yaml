@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Publish"
+  short_description: "Create clean thematic Conventional Commits"
+  default_prompt: "Use $git-publish to organize my current changes into thematic Conventional Commits and push them if I explicitly request it."

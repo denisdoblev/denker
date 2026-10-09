@@ -152,6 +152,7 @@ The 2026-10-07 run is recorded in `sdd/context/evals/results/2026-10-07-local-as
 | `$sdd-review` / `/sdd-review` | Review independently along SPEC, STANDARDS, and SIMPLICITY axes. |
 | `$sdd-validate` / `/sdd-validate` | Test completion claims against fresh evidence and the Definition of Done. |
 | `$sdd-change` / `/sdd-change` | Propagate a changed requirement through affected artifacts and implementation. |
+| `$git-publish` / `/git-publish` | Organize current changes into thematic Conventional Commits and push only when explicitly requested. |
 
 ## Tools by stage
 
