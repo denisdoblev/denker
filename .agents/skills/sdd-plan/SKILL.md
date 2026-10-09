@@ -20,7 +20,7 @@ Translate the accepted contract into a credible technical approach without writi
    - Testing strategy tied to acceptance risks and the validation policy in `sdd/POLICIES.md`.
    - Architectural impacts and whether a durable decision needs an ADR.
    - Explicit non-changes, risks, and mitigations.
-   - For materially brownfield or cross-cutting work, state whether context stays `direct` or explicitly uses `local-assisted`, including its budget, verification, and direct fallback. Omit this ceremony for localized work.
+   - Keep context `direct`. Only when the user explicitly requests Ollama or `local-assisted` for materially brownfield or cross-cutting work, record its budget, verification, and direct fallback. Omit this ceremony otherwise.
 5. Apply the simplicity gate to each proposed element:
    - Is it required by a requirement or acceptance criterion now?
    - Does an equivalent capability or pattern already exist in the repository?

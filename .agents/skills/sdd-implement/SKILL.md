@@ -1,11 +1,11 @@
 ---
 name: sdd-implement
-description: Implement one or more ready SDD tasks against their specification, plan, and repository conventions. Use when scoped product changes should be made with proportional checks and task status backed by fresh evidence.
+description: Implement one or more ready SDD tasks, then complete the default review-validation cycle against their specification, plan, and repository conventions. Use when scoped product changes should be made and proven with fresh evidence.
 ---
 
 # SDD Implement
 
-Implement a requested or ready task against the accepted contract.
+Implement a requested or ready task against the accepted contract, then complete the review-validation cycle by default.
 
 ## Procedure
 
@@ -23,12 +23,14 @@ Implement a requested or ready task against the accepted contract.
    - Use `$sdd-change` for a changed contract.
    - Revisit `$sdd-plan` when the accepted technical approach is invalid.
 9. Mark the task `completed` only after its validation passes. Recompute the ready frontier. Implementation completion does not imply feature validation.
+10. Unless this is runner-owned mode, continue automatically with `$sdd-review` and `$sdd-validate`; do not wait for separate user invocations. Send actionable failures back through the smallest `$sdd-implement` repair, then repeat review and validation until they pass or a stopping condition in `sdd/POLICIES.md` is reached.
 
 ## Boundaries
 
 - Do not expand into nearby cleanup or speculative infrastructure.
 - Do not claim checks that were not run or hide failing output.
 - Do not mark dependent tasks ready until every blocker is completed.
+- Use direct context. Do not invoke Ollama or `local-assisted` unless the user explicitly requested it.
 
 ## Runner-owned mode
 
@@ -44,4 +46,4 @@ Use this mode only when the prompt contains both `SDD_RUNNER_MODE: true` and an
 
 ## Report
 
-Describe the outcome, files changed, task status, commands and results, deviations, remaining risks, and next ready tasks. Route the completed feature to `$sdd-review`, then `$sdd-validate`.
+After the full cycle, describe the outcome, files changed, task status, review result, validation evidence, deviations, remaining risks, and next ready tasks.

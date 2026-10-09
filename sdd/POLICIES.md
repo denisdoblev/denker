@@ -21,8 +21,8 @@ Stop as soon as the evidence is sufficient. Do not read an entire documentation 
 
 `local-assisted` is optional evidence preparation, not delegated judgment. The repository and accepted artifacts remain authoritative. Route in this order:
 
-1. Keep `direct` as the default and use it for known bounded sources, exact-text work, specs, authority documents, templates, Skills, and SDD contracts.
-2. When explicitly requested, enumerate with `git ls-files` and fall back to `rg --files`; search explicit paths, terms, and meaningful words with `rg`.
+1. Keep `direct` as the default and use it for known bounded sources, exact-text work, specs, authority documents, templates, Skills, and SDD contracts. Never choose Ollama or `local-assisted` autonomously.
+2. Only when the user explicitly requests Ollama or `local-assisted`, enumerate with `git ls-files` and fall back to `rg --files`; search explicit paths, terms, and meaningful words with `rg`.
 3. If deterministic anchors are insufficient, the local model may suggest at most eight terms and six paths. Retain only existing paths and terms that produce deterministic repository matches.
 4. Expand bounded candidates through local imports/references and related tests. Rank explicit paths and independent signals before weaker matches.
 5. Read files up to 400 lines completely. For larger files, use ±80-line ranges around evidence and merge gaps of at most 20 lines.
@@ -32,6 +32,10 @@ Stop as soon as the evidence is sufficient. Do not read an entire documentation 
 The packet records search commands and counts, selected paths/ranges/reasons, source hashes, cited facts and inferences, recommended direct reads, errors, and observed timings/bytes/tokens. It never persists prompts, source excerpts, model reasoning, or counterfactual savings. The local model may only discover, read, and synthesize factual evidence. Only the configured Codex decision model interprets requirements, makes decisions, edits, reviews, validates, or issues a verdict.
 
 The bounded runner applies opt-in `local-assisted` only before `IMPLEMENT`; `REPAIR`, `REVIEW`, and `VALIDATE` remain direct. Experimental gates are required recall ≥95% per case, aggregate precision ≥90%, zero invalid citations or critical omissions, quality delta no worse than −5 points per case, correct repair in both modes, fallback ≤25%, median cloud-input reduction ≥40%, and non-negative savings in at least three of four paired cases. A quality failure rejects the experiment; passing quality without utility is safe but not useful. No result changes the default automatically.
+
+## Implementation-cycle policy
+
+For work managed through SDD, entering implementation starts the default `IMPLEMENT → REVIEW → VALIDATE` cycle. A repairable review finding or validation delta returns to `REPAIR`, followed again by `REVIEW → VALIDATE`. The cycle ends only with successful validation, an external blocker, a required human decision, or an explicit user request to stop. Review and validation remain independent phases with fresh evidence even when the host executes them automatically.
 
 The following tasks must never be delegated to the local preprocessor: ambiguous requirement interpretation; product or scope decisions; architecture or trade-offs; security, permissions, or privacy; concurrency, transactions, migrations, or compatibility; public contracts or protocols; final causal diagnosis; fix selection; writing or applying changes; final review; or validation verdicts.
 

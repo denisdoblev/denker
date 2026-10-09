@@ -48,10 +48,10 @@ Adoption requires no package installation, framework CLI, database, or generated
 Classify by uncertainty, blast radius, reversibility, architectural and migration impact, domain complexity, and user impact—not by file count.
 
 - **Trivial:** direct change plus proportionate verification. Examples: typo, isolated label, obvious low-risk adjustment.
-- **Standard:** specify → plan → tasks → implement → review → validate. Run clarify or UI design only when needed.
+- **Standard:** specify → plan → tasks → implement → review → validate. Run clarify or UI design only when needed. Once implementation starts, review and validation are mandatory defaults rather than separately requested follow-ups.
 - **Architectural/high-risk:** add architecture analysis, ADRs, migration and compatibility strategy, stronger testing, and rollout evidence as the risk requires.
 
-The Skills are explicit-only. Invocation is host-specific:
+Workflow entry-point Skills are invoked explicitly. Invoking implementation starts the complete implementation tail by default: `implement → review → validate`, with repairable failures returning to implementation and then repeating review and validation. The user does not need to invoke review or validation separately. Invocation syntax is host-specific:
 
 - Codex: `$skill-name`
 - GitHub Copilot: `/skill-name`
@@ -81,6 +81,8 @@ validate
 ```
 
 After specification, `$sdd-change` is an available lateral propagation route whenever an approved requirement or design changes. It is not a mandatory terminal stage: it updates only invalidated artifacts and work, then returns the change to the appropriate workflow stage.
+
+The implementation tail stops only on successful validation, an external blocker, a required human decision, or a user request to stop. Ollama is not part of this default: `direct` context remains mandatory unless the user explicitly requests `local-assisted`.
 
 ### Host invocation matrix
 
@@ -116,7 +118,7 @@ Public options are `--tasks`, `--task`, `--max-repair-cycles` (default `3`), `--
 
 ### Optional local-assisted context
 
-The opt-in path is a derived-evidence pipeline:
+The opt-in path is a derived-evidence pipeline. It may run only when the user explicitly requests Ollama or `local-assisted`; the agent must not select it autonomously:
 
 ```text
 task → git/rg discovery → bounded local expansion → Ollama factual reader → cited packet → GPT-5.6 Sol
@@ -221,9 +223,7 @@ $sdd-specify Add product comparison for signed-in shoppers
 $sdd-plan
 $ui-design        # plan marked "UI design required: yes"
 $sdd-tasks
-$sdd-implement T1
-$sdd-review
-$sdd-validate
+$sdd-implement T1   # continues through review and validation by default
 ```
 
 For a small backend-only change, omit `$ui-design`. For a typo, omit the SDD workflow entirely.

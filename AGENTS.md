@@ -41,6 +41,8 @@ La documentación más cercana a un workspace podrá complementar o restringir e
 - La arquitectura documenta el estado actual; los ADR registran sólo decisiones duraderas, consecuenciales y con alternativas reales.
 - Mantener los cambios dentro del alcance. Exponer desviaciones materiales en lugar de improvisarlas silenciosamente.
 - Aplicar SDD en proporción al riesgo, impacto, incertidumbre, reversibilidad y alcance del cambio.
+- Toda implementación gestionada por SDD continúa por defecto con revisión y validación; los fallos reparables vuelven a implementación y repiten el ciclo hasta pasar o requerir una decisión humana.
+- No usar Ollama ni `local-assisted` salvo pedido explícito del usuario; el contexto directo es siempre el valor por defecto.
 - Distinguir siempre el estado implementado de la arquitectura o comportamiento aprobado pero todavía pendiente.
 - No diseñar anticipadamente backend, IA, GitHub ni colaboración mientras sigan fuera del alcance activo.
 - No copiar comportamiento upstream sin comprobar la fuente oficial actual y su licencia.

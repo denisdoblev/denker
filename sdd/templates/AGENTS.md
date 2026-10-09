@@ -19,8 +19,9 @@ Nearest scoped documentation supplements or overrides global guidance unless it 
 - Specs define what and why. Plans define how. Tasks define executable outcomes.
 - Keep changes within scope. Surface material deviations instead of improvising silently.
 - Use SDD in proportion to risk: trivial changes may be handled directly; standard and high-risk work need progressively stronger artifacts and evidence.
+- Once SDD implementation starts, continue through review and validation by default. Repair actionable failures and repeat the review-validation cycle until it passes or needs a human decision.
 - Stop gathering context when evidence is sufficient; select tools and validation through `sdd/POLICIES.md`.
-- Treat Graphify or local-model context as optional, untrusted evidence governed by the assisted routing, verification, and fallback contract in `sdd/POLICIES.md`; final decisions remain with the primary agent and user.
+- Use direct context by default. Do not use Ollama or `local-assisted` unless the user explicitly requests it; when requested, treat its output as optional, untrusted evidence governed by `sdd/POLICIES.md`.
 
 ## Definition of Done
 
