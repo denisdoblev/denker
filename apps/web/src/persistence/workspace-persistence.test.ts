@@ -7,7 +7,7 @@ import {
 } from "./workspace-persistence";
 
 describe("workspace persistence", () => {
-  it("loads absent data and saves valid v1 data", async () => {
+  it("loads absent data and saves valid v2 data", async () => {
     const persistence = new MemoryWorkspacePersistence();
     const workspace = createEmptyWorkspace();
 
@@ -24,6 +24,17 @@ describe("workspace persistence", () => {
 
     await expect(persistence.load()).resolves.toEqual({ status: "invalid" });
     expect(persistence.inspectRawValue()).toBe("invalid bytes");
+  });
+
+  it("reports a v1 payload invalid without writing until reset", async () => {
+    const v1 = JSON.stringify({ version: 1, workspace: createEmptyWorkspace() });
+    const persistence = new MemoryWorkspacePersistence(v1);
+
+    await expect(persistence.load()).resolves.toEqual({ status: "invalid" });
+    expect(persistence.inspectRawValue()).toBe(v1);
+
+    await persistence.reset(createEmptyWorkspace());
+    expect(persistence.inspectRawValue()).toContain('"version":2');
   });
 
   it("falls back to memory when browser storage throws", async () => {
@@ -60,7 +71,7 @@ describe("workspace persistence", () => {
     expect(storage.getItem).toHaveBeenCalledWith(WORKSPACE_STORAGE_KEY);
     expect(storage.setItem).toHaveBeenCalledWith(
       WORKSPACE_STORAGE_KEY,
-      expect.stringContaining('"version":1'),
+      expect.stringContaining('"version":2'),
     );
   });
 });

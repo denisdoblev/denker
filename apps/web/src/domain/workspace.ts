@@ -26,9 +26,29 @@ export interface ChatMessage {
   content: string;
 }
 
+export const GUIDED_CHAT_PHASES = [
+  "prd",
+  "screen-design",
+  "database-design",
+  "implementation-plan",
+  "implementation",
+  "testing-review",
+] as const;
+
+export type GuidedChatPhase = (typeof GUIDED_CHAT_PHASES)[number];
+export type GuidedChatProgress = "pending" | "in-progress" | "ready" | "not-applicable";
+
+export interface GuidedChatAvailability {
+  available: boolean;
+  blockers: GuidedChatPhase[];
+}
+
 export interface Chat {
   id: string;
   title: string;
+  kind: "guided" | "additional";
+  phase: GuidedChatPhase | null;
+  progress: GuidedChatProgress | null;
   messages: ChatMessage[];
   scenarioId: string | null;
   scenarioStep: number;
@@ -97,8 +117,8 @@ export interface WorkspaceState {
   syncState: SyncState;
 }
 
-export interface WorkspaceEnvelopeV1 {
-  version: 1;
+export interface WorkspaceEnvelopeV2 {
+  version: 2;
   workspace: WorkspaceState;
 }
 
@@ -137,6 +157,109 @@ const nextId = (prefix: string, existingIds: string[]): string => {
   return `${prefix}-${index}`;
 };
 
+const guidedChatTitles: Record<GuidedChatPhase, string> = {
+  prd: "PRD",
+  "screen-design": "Diseño de pantallas",
+  "database-design": "Diseño de base de datos",
+  "implementation-plan": "Plan de implementación",
+  implementation: "Implementación",
+  "testing-review": "Pruebas y revisión",
+};
+
+export const createGuidedChats = (prdId: string): Chat[] =>
+  GUIDED_CHAT_PHASES.map((phase, index) => ({
+    id: `${prdId}-chat-${index + 1}`,
+    title: guidedChatTitles[phase],
+    kind: "guided",
+    phase,
+    progress: phase === "prd" ? null : "pending",
+    messages: [],
+    scenarioId: null,
+    scenarioStep: 0,
+  }));
+
+const designPhases = new Set<GuidedChatPhase>([
+  "screen-design",
+  "database-design",
+]);
+
+const phaseDependencies: Partial<Record<GuidedChatPhase, GuidedChatPhase[]>> = {
+  "screen-design": ["prd"],
+  "database-design": ["prd"],
+  "implementation-plan": ["screen-design", "database-design"],
+  implementation: ["implementation-plan"],
+  "testing-review": ["implementation"],
+};
+
+const progressSatisfiesDependency = (chat: Chat): boolean =>
+  chat.progress === "ready" ||
+  (designPhases.has(chat.phase as GuidedChatPhase) && chat.progress === "not-applicable");
+
+export function getGuidedChatAvailability(
+  prd: Prd,
+  phase: GuidedChatPhase,
+): GuidedChatAvailability {
+  if (phase === "prd") return { available: true, blockers: [] };
+
+  const blockers = (phaseDependencies[phase] ?? []).flatMap((dependency) => {
+    if (dependency === "prd") return prd.lifecycle === "draft" ? [dependency] : [];
+    const chat = prd.chats.find(
+      (candidate) => candidate.kind === "guided" && candidate.phase === dependency,
+    );
+    if (!chat) return [dependency];
+    const availability = getGuidedChatAvailability(prd, dependency);
+    if (!availability.available) return availability.blockers;
+    return progressSatisfiesDependency(chat) ? [] : [dependency];
+  });
+
+  return { available: blockers.length === 0, blockers: [...new Set(blockers)] };
+}
+
+export function isChatAvailable(prd: Prd, chat: Chat): boolean {
+  return chat.kind === "additional" ||
+    (chat.phase !== null && getGuidedChatAvailability(prd, chat.phase).available);
+}
+
+export function changeGuidedChatProgress(
+  workspace: WorkspaceState,
+  selection: ActiveSelection,
+  progress: GuidedChatProgress,
+): WorkspaceState {
+  const project = workspace.projects.find(({ id }) => id === selection.projectId);
+  const prd = project?.prds.find(({ id }) => id === selection.prdId);
+  const chat = prd?.chats.find(({ id }) => id === selection.chatId);
+  if (
+    !project || !prd || !chat || chat.kind !== "guided" || chat.phase === null ||
+    chat.phase === "prd" || !getGuidedChatAvailability(prd, chat.phase).available ||
+    (progress === "not-applicable" && !designPhases.has(chat.phase)) ||
+    chat.progress === progress
+  ) return workspace;
+
+  return {
+    ...workspace,
+    projects: workspace.projects.map((candidateProject) =>
+      candidateProject.id !== project.id
+        ? candidateProject
+        : {
+            ...candidateProject,
+            prds: candidateProject.prds.map((candidatePrd) =>
+              candidatePrd.id !== prd.id
+                ? candidatePrd
+                : {
+                    ...candidatePrd,
+                    chats: candidatePrd.chats.map((candidateChat) =>
+                      candidateChat.id === chat.id
+                        ? { ...candidateChat, progress }
+                        : candidateChat,
+                    ),
+                  },
+            ),
+          },
+    ),
+    syncState: "unsynced",
+  };
+}
+
 export function createProject(
   workspace: WorkspaceState,
   name: string,
@@ -147,7 +270,8 @@ export function createProject(
 
   const projectId = nextId("project", workspace.projects.map(({ id }) => id));
   const prdId = `${projectId}-prd-1`;
-  const chatId = `${prdId}-chat-1`;
+  const chats = createGuidedChats(prdId);
+  const chatId = chats[0].id;
   const project: Project = {
     id: projectId,
     name: normalizedName,
@@ -165,15 +289,7 @@ export function createProject(
         document: {
           markdown: `# PRD 001\n\n## Objetivo\n\nTBD\n\n## Requisitos\n\nTBD`,
         },
-        chats: [
-          {
-            id: chatId,
-            title: "Chat 1",
-            messages: [],
-            scenarioId: null,
-            scenarioStep: 0,
-          },
-        ],
+        chats,
         snapshots: [],
         findings: [],
         proposals: [],
@@ -202,7 +318,7 @@ export function createChat(
     `${prdId}-chat`,
     prd.chats.map(({ id }) => id),
   );
-  const chatNumber = prd.chats.length + 1;
+  const chatNumber = prd.chats.filter(({ kind }) => kind === "additional").length + 1;
   return {
     ...workspace,
     projects: workspace.projects.map((candidateProject) =>
@@ -219,7 +335,10 @@ export function createChat(
                       ...candidatePrd.chats,
                       {
                         id: chatId,
-                        title: `Chat ${chatNumber}`,
+                        title: `Chat adicional ${chatNumber}`,
+                        kind: "additional",
+                        phase: null,
+                        progress: null,
                         messages: [],
                         scenarioId: null,
                         scenarioStep: 0,
@@ -240,7 +359,11 @@ export function selectChat(
 ): WorkspaceState {
   const project = workspace.projects.find(({ id }) => id === selection.projectId);
   const prd = project?.prds.find(({ id }) => id === selection.prdId);
-  if (!prd?.chats.some(({ id }) => id === selection.chatId)) return workspace;
+  const chat = prd?.chats.find(({ id }) => id === selection.chatId);
+  if (
+    !prd || !chat ||
+    !isChatAvailable(prd, chat)
+  ) return workspace;
   return { ...workspace, activeSelection: selection };
 }
 
@@ -254,7 +377,7 @@ export function addUserMessage(
   const project = workspace.projects.find(({ id }) => id === selection.projectId);
   const prd = project?.prds.find(({ id }) => id === selection.prdId);
   const chat = prd?.chats.find(({ id }) => id === selection.chatId);
-  if (!chat) return workspace;
+  if (!prd || !chat || !isChatAvailable(prd, chat)) return workspace;
 
   const messageId = nextId("message", chat.messages.map(({ id }) => id));
   return {
@@ -460,7 +583,10 @@ export function continueFinalPrd(
     const chatId = nextId(`${prd.id}-chat`, prd.chats.map(({ id }) => id));
     const chat: Chat = {
       id: chatId,
-      title: `Chat ${prd.chats.length + 1}`,
+      title: `Chat adicional ${prd.chats.filter(({ kind }) => kind === "additional").length + 1}`,
+      kind: "additional",
+      phase: null,
+      progress: null,
       messages: [],
       scenarioId: null,
       scenarioStep: 0,
@@ -499,19 +625,14 @@ export function continueFinalPrd(
   ) + 1;
   const title = `PRD ${String(nextNumber).padStart(3, "0")}`;
   const prdId = nextId(`${project.id}-prd`, project.prds.map(({ id }) => id));
-  const chatId = `${prdId}-chat-1`;
+  const chats = createGuidedChats(prdId);
+  const chatId = chats[0].id;
   const nextPrd: Prd = {
     id: prdId,
     title,
     lifecycle: "draft",
     document: { markdown: initialPrdMarkdown(title) },
-    chats: [{
-      id: chatId,
-      title: "Chat 1",
-      messages: [],
-      scenarioId: null,
-      scenarioStep: 0,
-    }],
+    chats,
     snapshots: [],
     findings: [],
     proposals: [],
@@ -629,7 +750,7 @@ export function applyPrdFixtureMarkdown(
 }
 
 export const encodeWorkspaceEnvelope = (workspace: WorkspaceState): string =>
-  JSON.stringify({ version: 1, workspace } satisfies WorkspaceEnvelopeV1);
+  JSON.stringify({ version: 2, workspace } satisfies WorkspaceEnvelopeV2);
 
 export type DecodeResult =
   | { status: "valid"; workspace: WorkspaceState }
@@ -637,6 +758,8 @@ export type DecodeResult =
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+const hasExactKeys = (value: Record<string, unknown>, keys: string[]): boolean =>
+  Object.keys(value).length === keys.length && keys.every((key) => key in value);
 const isString = (value: unknown): value is string => typeof value === "string";
 const isBoolean = (value: unknown): value is boolean =>
   typeof value === "boolean";
@@ -666,13 +789,33 @@ const isChatMessage = (value: unknown): value is ChatMessage =>
   (value.role === "user" || value.role === "agent") &&
   isString(value.content);
 
-const isChat = (value: unknown): value is Chat =>
-  isRecord(value) &&
-  isString(value.id) &&
-  isString(value.title) &&
-  isArrayOf(value.messages, isChatMessage) &&
-  (value.scenarioId === null || isString(value.scenarioId)) &&
-  isNonNegativeInteger(value.scenarioStep);
+const isChat = (value: unknown): value is Chat => {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "id", "title", "kind", "phase", "progress", "messages", "scenarioId", "scenarioStep",
+    ]) ||
+    !isString(value.id) ||
+    !isString(value.title) ||
+    !isArrayOf(value.messages, isChatMessage) ||
+    !(value.scenarioId === null || isString(value.scenarioId)) ||
+    !isNonNegativeInteger(value.scenarioStep)
+  ) return false;
+
+  if (value.kind === "additional") {
+    return value.phase === null && value.progress === null;
+  }
+  if (value.kind !== "guided" || !GUIDED_CHAT_PHASES.includes(value.phase as GuidedChatPhase)) {
+    return false;
+  }
+  if (value.phase === "prd") return value.progress === null;
+  if (value.phase === "screen-design" || value.phase === "database-design") {
+    return value.progress === "pending" || value.progress === "in-progress" ||
+      value.progress === "ready" || value.progress === "not-applicable";
+  }
+  return value.progress === "pending" || value.progress === "in-progress" ||
+    value.progress === "ready";
+};
 
 const isPrdSnapshot = (value: unknown): value is PrdSnapshot =>
   isRecord(value) &&
@@ -788,7 +931,8 @@ export function decodeWorkspaceEnvelope(raw: string): DecodeResult {
     const envelope: unknown = JSON.parse(raw);
     if (
       !isRecord(envelope) ||
-      envelope.version !== 1 ||
+      !hasExactKeys(envelope, ["version", "workspace"]) ||
+      envelope.version !== 2 ||
       !isWorkspaceState(envelope.workspace)
     ) {
       return { status: "invalid" };

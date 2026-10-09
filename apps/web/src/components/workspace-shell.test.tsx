@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createRef, useEffect, type RefObject } from "react";
 import { renderToString } from "react-dom/server";
 
-import { applyPrdFixtureMarkdown, createEmptyWorkspace, decodeWorkspaceEnvelope, encodeWorkspaceEnvelope, type ProposalCategory, type SyncState, type WorkspaceState } from "@/domain/workspace";
+import { addUserMessage, applyPrdFixtureMarkdown, changeGuidedChatProgress, createChat, createEmptyWorkspace, createProject, decodeWorkspaceEnvelope, encodeWorkspaceEnvelope, selectChat, startPrdReview, type ProposalCategory, type SyncState, type WorkspaceState } from "@/domain/workspace";
 import { DEMO_SCENARIOS } from "@/domain/demo-scenarios";
 import {
   BrowserWorkspacePersistence,
@@ -49,8 +49,8 @@ const markdownWorkspace = (): WorkspaceState => ({
         markdown: "# PRD flexible\n\nTBD\n\n> Warning: falta decidir\n\nhttps://example.com/una/ruta/muy/larga/que/debe/poder/ajustarse\n\n```ts\nconst seguro = true\n```\n\n| Estado | Valor |\n| --- | --- |\n| Abierto | TBD |\n\n<script>window.unsafe = true</script>",
       },
       chats: [
-        { id: "chat-1", title: "Chat 1", messages: [], scenarioId: null, scenarioStep: 0 },
-        { id: "chat-2", title: "Chat 2", messages: [], scenarioId: null, scenarioStep: 0 },
+        { id: "chat-1", title: "Chat 1", kind: "additional", phase: null, progress: null, messages: [], scenarioId: null, scenarioStep: 0 },
+        { id: "chat-2", title: "Chat 2", kind: "additional", phase: null, progress: null, messages: [], scenarioId: null, scenarioStep: 0 },
       ],
       snapshots: [{ id: "snapshot-1", version: 1, markdown: "# PRD final\n\nContenido inmutable" }],
       findings: [],
@@ -60,7 +60,7 @@ const markdownWorkspace = (): WorkspaceState => ({
       title: "PRD 002",
       lifecycle: "draft",
       document: { markdown: "# Segundo PRD de Atlas" },
-      chats: [{ id: "chat-atlas-second", title: "Chat Atlas PRD 002", messages: [], scenarioId: "scenario-atlas", scenarioStep: 1 }],
+      chats: [{ id: "chat-atlas-second", title: "Chat Atlas PRD 002", kind: "additional", phase: null, progress: null, messages: [], scenarioId: "scenario-atlas", scenarioStep: 1 }],
       snapshots: [],
       findings: [],
       proposals: [],
@@ -75,7 +75,7 @@ const markdownWorkspace = (): WorkspaceState => ({
       title: "PRD 003",
       lifecycle: "draft",
       document: { markdown: "# PRD de Boreal" },
-      chats: [{ id: "chat-boreal", title: "Chat Boreal", messages: [], scenarioId: "scenario-boreal", scenarioStep: 0 }],
+      chats: [{ id: "chat-boreal", title: "Chat Boreal", kind: "additional", phase: null, progress: null, messages: [], scenarioId: "scenario-boreal", scenarioStep: 0 }],
       snapshots: [],
       findings: [],
       proposals: [],
@@ -224,7 +224,7 @@ describe("WorkspaceShell", () => {
       const documentsTrigger = screen.getByRole("button", { name: "Abrir documentos" });
       await user.click(documentsTrigger);
       expect(screen.getByRole("dialog", { name: "Documentos compartidos" })).toBeInTheDocument();
-      expect(screen.getByRole("combobox", { name: "Documento" })).toHaveFocus();
+      await waitFor(() => expect(screen.getByRole("combobox", { name: "Documento" })).toHaveFocus());
       await user.keyboard("{Escape}");
       expect(screen.queryByRole("dialog", { name: "Documentos compartidos" })).not.toBeInTheDocument();
       expect(documentsTrigger).toHaveFocus();
@@ -316,6 +316,49 @@ describe("WorkspaceShell", () => {
     localStorageRead.mockRestore();
   });
 
+  it("restores the active guided flow, additional history and isolated Projects after reload without network", async () => {
+    const previousFetch = globalThis.fetch;
+    const fetchSpy = jest.fn().mockRejectedValue(new Error("sin red"));
+    Object.defineProperty(globalThis, "fetch", { configurable: true, value: fetchSpy });
+    try {
+      let workspace = createProject(createEmptyWorkspace(), "Atlas");
+      const atlas = workspace.projects[0];
+      const atlasPrd = atlas.prds[0];
+      workspace = startPrdReview(workspace, atlas.id, atlasPrd.id);
+      const screenDesign = {
+        projectId: atlas.id,
+        prdId: atlasPrd.id,
+        chatId: workspace.projects[0].prds[0].chats.find(({ phase }) => phase === "screen-design")!.id,
+      };
+      workspace = changeGuidedChatProgress(workspace, screenDesign, "ready");
+      workspace = createChat(workspace, atlas.id, atlasPrd.id);
+      const additional = workspace.activeSelection!;
+      workspace = addUserMessage(workspace, additional, "Historia adicional restaurada");
+      workspace = createProject(workspace, "Boreal");
+      workspace = selectChat(workspace, additional);
+
+      const persistence = new MemoryWorkspacePersistence(encodeWorkspaceEnvelope(workspace));
+      const firstRender = render(<WorkspaceShell persistence={persistence} />);
+      expect(await screen.findByText("Historia adicional restaurada")).toBeInTheDocument();
+      firstRender.unmount();
+
+      render(<WorkspaceShell persistence={persistence} />);
+      expect(await screen.findByText("Atlas / PRD 001 / Chat adicional 1")).toBeInTheDocument();
+      expect(screen.getByText("Historia adicional restaurada")).toBeInTheDocument();
+      const atlasBranch = screen.getByRole("heading", { name: "Atlas" }).closest("section")!;
+      const borealBranch = screen.getByRole("heading", { name: "Boreal" }).closest("section")!;
+      expect(within(atlasBranch).getByRole("button", { name: "Diseño de pantallas. Listo para avanzar" })).toBeInTheDocument();
+      expect(within(borealBranch).getByRole("button", { name: "Diseño de pantallas. Pendiente. Bloqueado. Mostrar requisitos" })).toBeInTheDocument();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      if (previousFetch) {
+        Object.defineProperty(globalThis, "fetch", { configurable: true, value: previousFetch });
+      } else {
+        Reflect.deleteProperty(globalThis, "fetch");
+      }
+    }
+  });
+
   it("keeps a usable in-memory session when browser storage is unavailable", async () => {
     const user = userEvent.setup();
     const persistence = new BrowserWorkspacePersistence(() => ({
@@ -375,7 +418,7 @@ describe("WorkspaceShell", () => {
     expect(
       await screen.findByRole("heading", { name: "Convierte una idea en contexto claro" }),
     ).toBeInTheDocument();
-    expect(persistence.inspectRawValue()).toContain('"version":1');
+    expect(persistence.inspectRawValue()).toContain('"version":2');
     expect(persistence.inspectRawValue()).toContain('"projects":[]');
   });
 
@@ -391,16 +434,106 @@ describe("WorkspaceShell", () => {
     await user.type(name, "Atlas");
     await user.click(within(dialog).getByRole("button", { name: "Crear Project" }));
 
-    expect(await screen.findByText("Describe tu idea")).toBeInTheDocument();
+    expect(await screen.findByText("Define esta iniciativa")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Mensaje" })).toHaveFocus();
     expect(screen.getByText(/Repositorio no conectado/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Chat 1" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "PRD. Borrador" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Recorrido guiado")).toBeInTheDocument();
+    expect(screen.getByText("Chats adicionales")).toBeInTheDocument();
+    for (const phase of [
+      "Diseño de pantallas",
+      "Diseño de base de datos",
+      "Plan de implementación",
+      "Implementación",
+      "Pruebas y revisión",
+    ]) {
+      expect(screen.getByRole("button", { name: `${phase}. Pendiente. Bloqueado. Mostrar requisitos` })).toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole("button", { name: "Diseño de pantallas. Pendiente. Bloqueado. Mostrar requisitos" }));
+    expect(screen.getByRole("button", { name: "PRD. Borrador" })).toHaveAttribute("aria-current", "page");
 
     await user.click(screen.getByRole("button", { name: "Abrir documentos" }));
     expect(screen.getByRole("heading", { name: "PRD 001" })).toBeInTheDocument();
     expect(screen.getAllByText("TBD").length).toBeGreaterThan(0);
     await user.selectOptions(screen.getByRole("combobox", { name: "Documento" }), "context");
     expect(screen.getByRole("heading", { name: "Contexto del producto: Atlas" })).toBeInTheDocument();
+  });
+
+  it("permite avanzar fases disponibles con progreso explícito y anuncia el desbloqueo", async () => {
+    const user = userEvent.setup();
+    const persistence = new MemoryWorkspacePersistence();
+    render(<WorkspaceShell persistence={persistence} />);
+
+    await user.click(await screen.findByRole("button", { name: "Crear Project" }));
+    await user.type(screen.getByRole("textbox", { name: "Nombre del Project" }), "Atlas");
+    await user.click(within(screen.getByRole("dialog", { name: "Crear Project" })).getByRole("button", { name: "Crear Project" }));
+    expect(screen.queryByRole("combobox", { name: "Progreso de la fase" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Abrir documentos" }));
+    await user.click(screen.getByRole("button", { name: "Iniciar revisión" }));
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
+
+    await user.click(screen.getByRole("button", { name: "Diseño de pantallas. Pendiente" }));
+    const progress = screen.getByRole("combobox", { name: "Progreso de la fase" });
+    expect(within(progress).getAllByRole("option").map(({ textContent }) => textContent)).toEqual([
+      "Pendiente", "En curso", "Listo para avanzar", "No aplica",
+    ]);
+    await user.selectOptions(progress, "ready");
+    expect(progress).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Diseño de base de datos. Pendiente" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Progreso de la fase" }), "not-applicable");
+    expect(screen.getByText(/Plan de implementación ya está disponible/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Plan de implementación. Pendiente" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Plan de implementación. Pendiente" }));
+    expect(within(screen.getByRole("combobox", { name: "Progreso de la fase" })).getAllByRole("option")).toHaveLength(3);
+    await waitFor(() => expect(persistedWorkspace(persistence).syncState).toBe("unsynced"));
+    expect(screen.queryByRole("button", { name: /Agregar fase|Eliminar fase|Configurar dependencias/ })).not.toBeInTheDocument();
+  });
+
+  it("explica bloqueos por teclado y conserva un Chat re-bloqueado como sólo lectura", async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceShell persistence={new MemoryWorkspacePersistence()} />);
+
+    await user.click(await screen.findByRole("button", { name: "Crear Project" }));
+    await user.type(screen.getByRole("textbox", { name: "Nombre del Project" }), "Atlas");
+    await user.click(within(screen.getByRole("dialog", { name: "Crear Project" })).getByRole("button", { name: "Crear Project" }));
+
+    const blockedRow = screen.getByRole("button", { name: "Plan de implementación. Pendiente. Bloqueado. Mostrar requisitos" });
+    blockedRow.focus();
+    await user.keyboard("{Enter}");
+    expect(blockedRow).toHaveFocus();
+    expect(blockedRow).toHaveAttribute("aria-expanded", "true");
+    expect(document.getElementById(blockedRow.getAttribute("aria-controls")!)).toHaveTextContent("El PRD debe estar En revisión o Final");
+    expect(screen.getByRole("button", { name: "PRD. Borrador" })).toHaveAttribute("aria-current", "page");
+
+    const implementationRow = screen.getByRole("button", { name: "Implementación. Pendiente. Bloqueado. Mostrar requisitos" });
+    implementationRow.focus();
+    await user.keyboard(" ");
+    expect(implementationRow).toHaveFocus();
+    expect(implementationRow).toHaveAttribute("aria-expanded", "true");
+    expect(blockedRow).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(screen.getByRole("button", { name: "Abrir documentos" }));
+    await user.click(screen.getByRole("button", { name: "Iniciar revisión" }));
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
+    await user.click(screen.getByRole("button", { name: "Diseño de pantallas. Pendiente" }));
+    await user.type(screen.getByRole("textbox", { name: "Mensaje" }), "Historia conservada");
+    await user.click(screen.getByRole("button", { name: "Enviar" }));
+
+    await user.click(screen.getByRole("button", { name: "Abrir documentos" }));
+    await user.click(screen.getByRole("button", { name: "Volver a borrador" }));
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
+
+    expect(screen.getByRole("button", { name: "Diseño de pantallas. Pendiente. Bloqueado. Mostrar requisitos" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("alert")).toHaveTextContent("Esta fase volvió a bloquearse");
+    expect(screen.getByRole("log", { name: "Historial del Chat, sólo lectura" })).toHaveTextContent("Historia conservada");
+    expect(screen.getByRole("button", { name: "Ir a PRD" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Progreso de la fase" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Escenario" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Mensaje" })).not.toBeInTheDocument();
   });
 
   it("mantiene el foco dentro de los diálogos y lo restaura al cerrar", async () => {
@@ -431,7 +564,7 @@ describe("WorkspaceShell", () => {
     await user.click(within(screen.getByRole("dialog", { name: "Crear Project" })).getByRole("button", { name: "Crear Project" }));
     await user.type(screen.getByRole("textbox", { name: "Mensaje" }), "Historia Atlas uno");
     await user.click(screen.getByRole("button", { name: "Enviar" }));
-    await user.click(screen.getByRole("button", { name: "Nuevo Chat en PRD 001 de Atlas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo Chat adicional en PRD 001 de Atlas" }));
     await user.type(screen.getByRole("textbox", { name: "Mensaje" }), "Historia Atlas dos");
     await user.click(screen.getByRole("button", { name: "Enviar" }));
 
@@ -446,13 +579,14 @@ describe("WorkspaceShell", () => {
     await user.type(composer, "Borrador sin enviar de Boreal");
 
     const atlasBranch = screen.getByRole("heading", { name: "Atlas" }).closest("section")!;
-    const atlasChats = within(atlasBranch).getAllByRole("button", { name: /^Chat \d+$/ });
-    await user.click(atlasChats[0]);
+    const atlasPrdChat = within(atlasBranch).getByRole("button", { name: "PRD. Borrador" });
+    const atlasAdditionalChat = within(atlasBranch).getByRole("button", { name: "Chat adicional 1" });
+    await user.click(atlasPrdChat);
     expect(screen.getByRole("textbox", { name: "Mensaje" })).toHaveValue("");
     expect(screen.queryByDisplayValue("Borrador sin enviar de Boreal")).not.toBeInTheDocument();
     expect(await screen.findByText("Historia Atlas uno")).toBeInTheDocument();
     expect(screen.queryByText("Historia Atlas dos")).not.toBeInTheDocument();
-    expect(atlasChats[0]).toHaveAttribute("aria-current", "page");
+    expect(atlasPrdChat).toHaveAttribute("aria-current", "page");
     await user.click(screen.getByRole("button", { name: "Abrir documentos" }));
     expect(screen.getByRole("heading", { name: "PRD 001" })).toBeInTheDocument();
     await user.selectOptions(screen.getByRole("combobox", { name: "Documento" }), "context");
@@ -460,10 +594,10 @@ describe("WorkspaceShell", () => {
     await user.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(screen.getByRole("button", { name: "Abrir documentos" })).toHaveFocus();
 
-    await user.click(atlasChats[1]);
+    await user.click(atlasAdditionalChat);
     expect(await screen.findByText("Historia Atlas dos")).toBeInTheDocument();
     expect(screen.queryByText("Historia Atlas uno")).not.toBeInTheDocument();
-    expect(atlasChats[1]).toHaveAttribute("aria-current", "page");
+    expect(atlasAdditionalChat).toHaveAttribute("aria-current", "page");
     await user.click(screen.getByRole("button", { name: "Abrir documentos" }));
     expect(screen.getByRole("heading", { name: "PRD 001" })).toBeInTheDocument();
     await user.selectOptions(screen.getByRole("combobox", { name: "Documento" }), "context");
@@ -471,7 +605,7 @@ describe("WorkspaceShell", () => {
     await user.click(screen.getByRole("button", { name: "Cerrar" }));
 
     const borealBranch = screen.getByRole("heading", { name: "Boreal" }).closest("section")!;
-    await user.click(within(borealBranch).getByRole("button", { name: "Chat 1" }));
+    await user.click(within(borealBranch).getByRole("button", { name: "PRD. Borrador" }));
     await user.click(screen.getByRole("button", { name: "Abrir documentos" }));
     expect(screen.getByRole("heading", { name: "PRD 001" })).toBeInTheDocument();
     await user.selectOptions(screen.getByRole("combobox", { name: "Documento" }), "context");
@@ -500,17 +634,17 @@ describe("WorkspaceShell", () => {
     await user.click(atlasProjectToggle);
     expect(document.getElementById(atlasProjectToggle.getAttribute("aria-controls")!)).toHaveAttribute("hidden");
     expect(within(boreal).getByText(/PRD 001/)).toBeInTheDocument();
-    expect(within(boreal).getByRole("button", { name: "Chat 1" })).toBeInTheDocument();
+    expect(within(boreal).getByRole("button", { name: "PRD. Borrador" })).toBeInTheDocument();
 
     const borealPrdToggle = within(boreal).getByRole("button", { name: "Contraer PRD 001 de Boreal" });
     expect(borealPrdToggle).toHaveAttribute("aria-controls");
     await user.click(borealPrdToggle);
-    expect(within(boreal).queryByRole("button", { name: "Chat 1" })).not.toBeInTheDocument();
-    expect(within(atlas).queryByRole("button", { name: "Chat 1" })).not.toBeInTheDocument();
+    expect(within(boreal).queryByRole("button", { name: "PRD. Borrador" })).not.toBeInTheDocument();
+    expect(within(atlas).queryByRole("button", { name: "PRD. Borrador" })).not.toBeInTheDocument();
 
     await user.click(within(atlas).getByRole("button", { name: "Expandir Project Atlas" }));
-    expect(within(atlas).getByRole("button", { name: "Chat 1" })).toBeInTheDocument();
-    expect(within(boreal).queryByRole("button", { name: "Chat 1" })).not.toBeInTheDocument();
+    expect(within(atlas).getByRole("button", { name: "PRD. Borrador" })).toBeInTheDocument();
+    expect(within(boreal).queryByRole("button", { name: "PRD. Borrador" })).not.toBeInTheDocument();
   });
 
   it("mantiene el resumen y la configuración de repositorio en el Project propietario", async () => {
@@ -537,7 +671,7 @@ describe("WorkspaceShell", () => {
 
     expect(within(atlas).getByText(/GitHub · denker\/atlas-docs · main · \/docs/)).toBeInTheDocument();
     expect(within(boreal).getByText(/Repositorio no conectado/)).toBeInTheDocument();
-    expect(screen.getByText("Boreal / PRD 001 / Chat 1")).toBeInTheDocument();
+    expect(screen.getByText("Boreal / PRD 001 / PRD")).toBeInTheDocument();
   });
 
   it("configura después un repositorio local con defaults y sin controles de identidad", async () => {
@@ -907,7 +1041,7 @@ describe("WorkspaceShell", () => {
     await user.click(within(screen.getByRole("dialog", { name: "¿Descartar cambios sin guardar?" })).getByRole("button", { name: "Descartar cambios" }));
     await user.type(screen.getByRole("textbox", { name: "Nombre del Project" }), "Celsius");
     await user.click(within(screen.getByRole("dialog", { name: "Crear Project" })).getByRole("button", { name: "Crear Project" }));
-    expect(await screen.findByText("Celsius / PRD 001 / Chat 1")).toBeInTheDocument();
+    expect(await screen.findByText("Celsius / PRD 001 / PRD")).toBeInTheDocument();
     expect(persistence.inspectRawValue()).not.toContain("Borrador protegido");
   });
 
@@ -1177,6 +1311,12 @@ describe("WorkspaceShell", () => {
   it("muestra sólo acciones válidas y permite editar o volver durante la revisión", async () => {
     const user = userEvent.setup();
     const initial = markdownWorkspace();
+    initial.projects[0].prds[0].chats[0] = {
+      ...initial.projects[0].prds[0].chats[0],
+      kind: "guided",
+      phase: "prd",
+      progress: null,
+    };
     initial.projects[0].prds[0].findings = [{
       id: "gap-1",
       kind: "gap",
@@ -1321,8 +1461,9 @@ describe("WorkspaceShell", () => {
         expect(persisted.projects[0].prds.at(-1)).toMatchObject({
           title: "PRD 003",
           lifecycle: "draft",
-          chats: [{ messages: [] }],
         });
+        expect(persisted.projects[0].prds.at(-1)?.chats).toHaveLength(6);
+        expect(persisted.projects[0].prds.at(-1)?.chats[0]).toMatchObject({ title: "PRD", kind: "guided", phase: "prd", messages: [] });
         expect(persisted.projects[0].prds.at(-1)?.document.markdown).toContain("TBD");
       }
     });

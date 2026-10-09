@@ -1,3 +1,4 @@
+import { isChatAvailable } from "./workspace";
 import type {
   ActiveSelection,
   ChatMessage,
@@ -352,7 +353,7 @@ export function loadDemoScenario(
 ): WorkspaceState {
   const branch = selectedBranch(workspace, selection);
   const scenario = getDemoScenario(scenarioId);
-  if (!branch || scenario.kind === "error") return workspace;
+  if (!branch || !isChatAvailable(branch.prd, branch.chat) || scenario.kind === "error") return workspace;
   const documentState = stateForScenario(scenario, branch.prd);
 
   return {
@@ -411,7 +412,7 @@ export function advanceDemoConversation(
 ): WorkspaceState {
   const normalizedContent = content.trim();
   const branch = selectedBranch(workspace, selection);
-  if (!normalizedContent || !branch) return workspace;
+  if (!normalizedContent || !branch || !isChatAvailable(branch.prd, branch.chat)) return workspace;
   const persistedScenarioId = branch.chat.scenarioId ?? DEFAULT_DEMO_SCENARIO_ID;
   const scenario = getDemoScenario(persistedScenarioId);
   const scenarioId = scenario.id;
@@ -471,7 +472,7 @@ export function recoverDemoError(
     return workspace;
   }
   const branch = selectedBranch(workspace, selection);
-  if (!branch) return workspace;
+  if (!branch || !isChatAvailable(branch.prd, branch.chat)) return workspace;
   const messages = [
     ...branch.chat.messages,
     {

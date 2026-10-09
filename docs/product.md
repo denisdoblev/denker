@@ -1,15 +1,15 @@
 # Denker — Product Context
 
 - **Estado:** contexto inicial aceptado
-- **Última actualización:** 2026-10-05
+- **Última actualización:** 2026-10-08
 
 Este documento consolida las decisiones de producto transversales. No sustituye a los PRDs de iniciativas concretas. La última versión aceptada o editada por el usuario es la fuente de verdad.
 
 ## Visión
 
-Denker ayuda a transformar una idea de producto en documentación de producto estructurada mediante una conversación con un Product Manager/Product Owner asistido por IA.
+Denker asiste el desarrollo de software desde la definición de una idea hasta su implementación y revisión. Organiza ese recorrido mediante conversaciones guiadas que ayudan a producir y mantener la documentación necesaria en cada fase.
 
-El usuario describe su idea, responde preguntas, analiza recomendaciones y toma decisiones. Mientras avanza el discovery, Denker mantiene Markdown vivo con el conocimiento consolidado del producto.
+El usuario describe su idea, responde preguntas, analiza recomendaciones y toma decisiones. Mientras avanza desde el discovery hacia el diseño, la planificación, la implementación y las pruebas, Denker mantiene Markdown vivo con el conocimiento consolidado del producto y de cada iniciativa.
 
 Principio rector: **el agente recomienda; el usuario decide**.
 
@@ -20,6 +20,8 @@ Principio rector: **el agente recomienda; el usuario decide**.
 - **PRD:** representa una iniciativa con alcance definido. No debe crecer indefinidamente para abarcar toda la vida del producto.
 - **PRD version:** snapshot de una versión del PRD. Una versión final es inmutable; una evolución de la misma iniciativa crea otra versión.
 - **Chat:** conversación con historial propio, siempre perteneciente a un PRD. No existen chats globales sueltos.
+- **Chat guiado:** Chat creado automáticamente como una fase del recorrido de desarrollo de un PRD. Puede estar disponible o bloqueado por sus dependencias.
+- **Chat adicional:** Chat creado por el usuario para preguntas o aclaraciones. No participa en las dependencias del recorrido guiado.
 
 La jerarquía es `Project → PRD → Chat`. Ante un cambio, el agente puede recomendar incorporarlo al PRD actual, crear una versión o abrir un PRD nuevo; la elección corresponde al usuario.
 
@@ -42,11 +44,30 @@ La sidebar presenta Projects, sus PRDs y los Chats de cada PRD. La experiencia e
 
 ## Creación y navegación
 
-Crear un Project produce automáticamente un Product Context inicial, `PRD 001` y el primer Chat. El usuario entra directamente a ese Chat; no debe completar manualmente cada nivel.
+Crear un Project produce automáticamente un Product Context inicial, `PRD 001` y los Chats guiados de ese PRD. El usuario entra directamente al Chat `PRD`; no debe completar manualmente cada nivel. Cada PRD posterior recibe un recorrido independiente con los mismos Chats guiados.
 
 Un Project puede conectarse a un repositorio durante su creación o más adelante. No tener repositorio nunca bloquea el discovery. La configuración conceptual contempla provider, owner u organization, repository, branch y documentation path, con defaults `main` y `/docs`.
 
 GitHub es el primer provider previsto, pero la versión inicial no realiza conexión, credenciales ni operaciones reales. La UI puede mostrar `Repository not connected`.
+
+## Flujo de desarrollo guiado
+
+Cada PRD contiene este flujo fijo de Chats:
+
+```text
+PRD ─┬─> Diseño de pantallas ────────┐
+     └─> Diseño de base de datos ────┴─> Plan de implementación
+                                               ↓
+                                        Implementación
+                                               ↓
+                                      Pruebas y revisión
+```
+
+`PRD` es la única fase disponible inicialmente. Cuando su documento alcanza `review` o `final`, quedan disponibles ambos Chats de diseño. `Plan de implementación` requiere que los dos diseños estén `Listo para avanzar` o `No aplica`; las fases restantes se habilitan sucesivamente cuando su predecesora está `Listo para avanzar`.
+
+El usuario decide los estados de avance; Denker no los infiere del contenido. Si una dependencia deja de cumplirse, las fases posteriores se bloquean otra vez en cascada sin perder sus mensajes ni estados y recuperan el acceso cuando la dependencia se restablece. Los Chats bloqueados muestran un candado a la derecha y explican qué dependencia impide usarlos.
+
+Los Chats adicionales están siempre disponibles, sirven para aclaraciones y no habilitan ni bloquean fases.
 
 ## Discovery asistido
 

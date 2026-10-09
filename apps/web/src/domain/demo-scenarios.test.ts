@@ -7,7 +7,7 @@ import {
   loadDemoScenario,
   recoverDemoError,
 } from "./demo-scenarios";
-import { createEmptyWorkspace, createProject, type WorkspaceState } from "./workspace";
+import { changeGuidedChatProgress, createEmptyWorkspace, createProject, returnPrdToDraft, startPrdReview, type WorkspaceState } from "./workspace";
 
 const createdWorkspace = () => createProject(createEmptyWorkspace(), "Atlas");
 
@@ -151,6 +151,43 @@ describe("deterministic Demo Mode scenarios", () => {
     expect(firstChat.scenarioStep).toBe(1);
     expect(secondChat.scenarioStep).toBe(1);
     expect(advanceDemoConversation(workspace, selection, "   \n ")).toBe(workspace);
+  });
+
+  it("never infers guided progress from messages, documents, or scenarios", () => {
+    let workspace = createdWorkspace();
+    const project = workspace.projects[0];
+    workspace = startPrdReview(workspace, project.id, project.prds[0].id);
+    const screenDesign = workspace.projects[0].prds[0].chats.find(({ phase }) => phase === "screen-design")!;
+    workspace = changeGuidedChatProgress(workspace, {
+      projectId: project.id,
+      prdId: project.prds[0].id,
+      chatId: screenDesign.id,
+    }, "in-progress");
+    const progressBefore = workspace.projects[0].prds[0].chats.map(({ progress }) => progress);
+
+    for (const scenario of DEMO_SCENARIOS) {
+      const loaded = loadDemoScenario(workspace, workspace.activeSelection!, scenario.id);
+      expect(loaded.projects[0].prds[0].chats.map(({ progress }) => progress)).toEqual(progressBefore);
+    }
+    const advanced = advanceDemoConversation(workspace, workspace.activeSelection!, "Mensaje libre");
+    expect(advanced.projects[0].prds[0].chats.map(({ progress }) => progress)).toEqual(progressBefore);
+  });
+
+  it("rejects loading, advancing, and recovering Demo Mode through a stale blocked selection", () => {
+    let workspace = createdWorkspace();
+    const project = workspace.projects[0];
+    workspace = startPrdReview(workspace, project.id, project.prds[0].id);
+    const selection = {
+      projectId: project.id,
+      prdId: project.prds[0].id,
+      chatId: workspace.projects[0].prds[0].chats.find(({ phase }) => phase === "screen-design")!.id,
+    };
+    workspace = { ...workspace, activeSelection: selection };
+    const blocked = returnPrdToDraft(workspace, selection.projectId, selection.prdId);
+
+    expect(loadDemoScenario(blocked, selection, "pregunta-del-agente")).toBe(blocked);
+    expect(advanceDemoConversation(blocked, selection, "No permitido")).toBe(blocked);
+    expect(recoverDemoError(blocked, selection, "respuesta-interrumpida")).toBe(blocked);
   });
 
   it("detects replacement of confirmed scenario state before loading", () => {

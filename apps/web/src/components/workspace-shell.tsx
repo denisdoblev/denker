@@ -22,11 +22,14 @@ import {
 } from "@/domain/demo-scenarios";
 import {
   beginDemoSync,
+  changeGuidedChatProgress,
   completeDemoSync,
   continueFinalPrd,
   createChat,
   createProject,
   finalizePrd,
+  getGuidedChatAvailability,
+  isChatAvailable,
   returnPrdToDraft,
   saveRepositoryConfiguration,
   savePrdMarkdown,
@@ -42,6 +45,9 @@ import {
   type RepositoryConfigurationInput,
   type ReviewFinding,
   type SensitiveProposal,
+  type Chat,
+  type GuidedChatProgress,
+  type GuidedChatPhase,
 } from "@/domain/workspace";
 import { browserWorkspacePersistence, type WorkspacePersistence } from "@/persistence/workspace-persistence";
 import { WorkspaceProvider, useWorkspace } from "@/store/workspace-store";
@@ -53,6 +59,35 @@ const lifecycleLabels: Record<PrdLifecycle, string> = {
   draft: "Borrador",
   review: "En revisión",
   final: "Final",
+};
+
+const progressLabels: Record<GuidedChatProgress, string> = {
+  pending: "Pendiente",
+  "in-progress": "En curso",
+  ready: "Listo para avanzar",
+  "not-applicable": "No aplica",
+};
+
+const chatProgressLabel = (chat: Chat): string =>
+  chat.progress ? progressLabels[chat.progress] : "";
+
+const phaseLabels: Record<GuidedChatPhase, string> = {
+  prd: "PRD",
+  "screen-design": "Diseño de pantallas",
+  "database-design": "Diseño de base de datos",
+  "implementation-plan": "Plan de implementación",
+  implementation: "Implementación",
+  "testing-review": "Pruebas y revisión",
+};
+
+const blockerDescription = (prd: Project["prds"][number], phase: GuidedChatPhase): string => {
+  if (phase === "prd") return `El PRD debe estar En revisión o Final. Estado actual: ${lifecycleLabels[prd.lifecycle]}.`;
+  const chat = prd.chats.find((candidate) => candidate.phase === phase);
+  const current = chat ? chatProgressLabel(chat) : "Pendiente";
+  if (phase === "screen-design" || phase === "database-design") {
+    return `${phaseLabels[phase]} está ${current}. Cámbialo a Listo para avanzar o No aplica.`;
+  }
+  return `${phaseLabels[phase]} debe tener el estado Listo para avanzar. Estado actual: ${current}.`;
 };
 
 const findingLabels: Record<ReviewFinding["kind"], string> = {
@@ -277,6 +312,7 @@ function DocumentsDialog({ project, prdId, clipboard, finalFocus, inline = false
   const [acceptWarnings, setAcceptWarnings] = useState(false);
   const [continueOpen, setContinueOpen] = useState(false);
   const [continuation, setContinuation] = useState<PrdContinuation | null>(null);
+  const [lifecycleAnnouncement, setLifecycleAnnouncement] = useState("");
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const documentSelectRef = useRef<HTMLSelectElement>(null);
   const previewTabRef = useRef<HTMLButtonElement>(null);
@@ -338,21 +374,29 @@ function DocumentsDialog({ project, prdId, clipboard, finalFocus, inline = false
     }
   };
   const transitionLifecycle = (action: "review" | "draft") => {
-    request(() => transitionWorkspace((current) => action === "review"
-      ? startPrdReview(current, project.id, prd.id)
-      : returnPrdToDraft(current, project.id, prd.id)));
+    request(() => {
+      const next = action === "review"
+        ? startPrdReview(workspace, project.id, prd.id)
+        : returnPrdToDraft(workspace, project.id, prd.id);
+      replaceWorkspace(next);
+      setLifecycleAnnouncement(action === "review"
+        ? "Estado del PRD: En revisión. Diseño de pantallas y Diseño de base de datos ya están disponibles."
+        : "Estado del PRD: Borrador. Las fases dependientes están bloqueadas.");
+    });
   };
   const openFinalization = () => request(() => {
     setAcceptWarnings(false);
     setFinalizeOpen(true);
   });
   const confirmFinalization = () => {
-    transitionWorkspace((current) => finalizePrd(
-      current,
+    const next = finalizePrd(
+      workspace,
       project.id,
       prd.id,
       acceptWarnings,
-    ));
+    );
+    replaceWorkspace(next);
+    setLifecycleAnnouncement("Estado del PRD: Final. Diseño de pantallas y Diseño de base de datos permanecen disponibles.");
     setFinalizeOpen(false);
   };
   const confirmContinuation = () => {
@@ -428,6 +472,7 @@ function DocumentsDialog({ project, prdId, clipboard, finalFocus, inline = false
           ) : null}
         </section>
       ) : null}
+      <p className="sr-only" aria-live="polite">{lifecycleAnnouncement}</p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Modo del documento" className="flex gap-2" onKeyDown={handleTabKeyDown}>
           <Button ref={previewTabRef} id="document-preview-tab" role="tab" aria-selected={mode === "preview"} aria-controls="document-preview-panel" tabIndex={mode === "preview" ? 0 : -1} type="button" size="sm" variant={mode === "preview" ? "default" : "outline"} onClick={() => setMode("preview")}>Vista previa</Button>
@@ -599,6 +644,8 @@ function WorkspaceNavigation({ demoSync, newProjectTriggerRef, embedded = false,
   const { request } = useNavigationGuard();
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
   const [collapsedPrds, setCollapsedPrds] = useState<Set<string>>(() => new Set());
+  const [openBlockers, setOpenBlockers] = useState<Record<string, string | undefined>>({});
+  const [blockerAnnouncement, setBlockerAnnouncement] = useState("");
   const [repositoryTarget, setRepositoryTarget] = useState<{ projectId: string; trigger: HTMLButtonElement } | null>(null);
   const cancelPendingSyncRef = useRef<(() => void) | null>(null);
 
@@ -701,23 +748,52 @@ function WorkspaceNavigation({ demoSync, newProjectTriggerRef, embedded = false,
                       </Button>
                     </div>
                     <div id={`${prd.id}-content`} hidden={collapsedPrds.has(prd.id)} className="mt-1 pl-3">
-                        <Button type="button" size="xs" variant="ghost" onClick={() => request(() => {
-                          replaceWorkspace(createChat(workspace, project.id, prd.id));
-                          onNavigate?.("composer");
-                        })} aria-label={`Nuevo Chat en ${prd.title} de ${project.name}`}>Nuevo Chat</Button>
+                        <p className="mt-2 text-xs font-semibold">Recorrido guiado</p>
                         <ul className="mt-1 space-y-1">
-                          {prd.chats.map((chat) => {
+                          {prd.chats.filter(({ kind }) => kind === "guided").map((chat) => {
                             const active = workspace.activeSelection?.chatId === chat.id;
+                            const availability = chat.phase === null ? { available: false, blockers: [] } : getGuidedChatAvailability(prd, chat.phase);
+                            const blocked = !availability.available;
+                            const disclosureOpen = openBlockers[prd.id] === chat.id;
+                            const disclosureId = `${chat.id}-requirements`;
                             return (
                               <li key={chat.id}>
-                                <button type="button" aria-current={active ? "page" : undefined} title={chat.title} className="w-full truncate rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground" onClick={() => request(() => {
+                                <button type="button" aria-current={active ? "page" : undefined} aria-expanded={blocked ? disclosureOpen : undefined} aria-controls={blocked ? disclosureId : undefined} aria-label={`${chat.title}. ${chat.phase === "prd" ? lifecycleLabels[prd.lifecycle] : `${chatProgressLabel(chat)}${blocked ? ". Bloqueado. Mostrar requisitos" : ""}`}`} title={chat.title} className="min-h-6 w-full rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground" onClick={() => request(() => {
+                                  if (blocked) {
+                                    setOpenBlockers((current) => ({ ...current, [prd.id]: disclosureOpen ? undefined : chat.id }));
+                                    setBlockerAnnouncement(availability.blockers.map((phase) => blockerDescription(prd, phase)).join(" "));
+                                    return;
+                                  }
                                   replaceWorkspace(selectChat(workspace, { projectId: project.id, prdId: prd.id, chatId: chat.id }));
                                   onNavigate?.("heading");
                                 })}>
-                                  {chat.title}
+                                  <span className="flex items-start justify-between gap-2"><span className="min-w-0 truncate">{chat.title}</span>{blocked ? <span aria-hidden="true">🔒</span> : null}</span>
+                                  <span className="block text-xs">{chat.phase === "prd" ? lifecycleLabels[prd.lifecycle] : `${chatProgressLabel(chat)}${blocked ? " · Bloqueado" : ""}`}</span>
                                 </button>
+                                {blocked && disclosureOpen ? (
+                                  <div id={disclosureId} className="mx-2 mt-1 rounded-md border bg-background p-2 text-xs">
+                                    <p className="font-semibold">Chat bloqueado</p>
+                                    {availability.blockers.length > 1 ? <ul className="mt-1 list-disc space-y-1 pl-4">{availability.blockers.map((phase) => <li key={phase}>{blockerDescription(prd, phase)}</li>)}</ul> : <p className="mt-1">{blockerDescription(prd, availability.blockers[0])}</p>}
+                                  </div>
+                                ) : null}
                               </li>
                             );
+                          })}
+                        </ul>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold">Chats adicionales</p>
+                          <Button type="button" size="xs" variant="ghost" onClick={() => request(() => {
+                            replaceWorkspace(createChat(workspace, project.id, prd.id));
+                            onNavigate?.("composer");
+                          })} aria-label={`Nuevo Chat adicional en ${prd.title} de ${project.name}`}>Nuevo Chat adicional</Button>
+                        </div>
+                        <ul className="mt-2 space-y-1">
+                          {prd.chats.filter(({ kind }) => kind === "additional").map((chat) => {
+                            const active = workspace.activeSelection?.chatId === chat.id;
+                            return <li key={chat.id}><button type="button" aria-current={active ? "page" : undefined} aria-label={chat.title} title={chat.title} className="w-full rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground" onClick={() => request(() => {
+                              replaceWorkspace(selectChat(workspace, { projectId: project.id, prdId: prd.id, chatId: chat.id }));
+                              onNavigate?.("heading");
+                            })}><span className="block truncate">{chat.title}</span><span className="block text-xs">Adicional</span></button></li>;
                           })}
                         </ul>
                     </div>
@@ -727,6 +803,7 @@ function WorkspaceNavigation({ demoSync, newProjectTriggerRef, embedded = false,
           </section>
         ))}
       </nav>
+      <p className="sr-only" aria-live="polite">{blockerAnnouncement}</p>
       {repositoryTarget && repositoryProject ? (
         <RepositoryDialog
           project={repositoryProject}
@@ -750,6 +827,7 @@ function ActiveChat({ viewport, focusTarget, navigationOpen, documentsOpen, navi
   } | null>(null);
   const [demoError, setDemoError] = useState<DemoErrorScenarioId | null>(null);
   const [proposalAnnouncement, setProposalAnnouncement] = useState("");
+  const [progressAnnouncement, setProgressAnnouncement] = useState("");
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chatTitleRef = useRef<HTMLHeadingElement>(null);
   const loadScenarioRef = useRef<HTMLButtonElement>(null);
@@ -766,6 +844,10 @@ function ActiveChat({ viewport, focusTarget, navigationOpen, documentsOpen, navi
     else composerRef.current?.focus();
   }, [active?.chat.id, focusTarget]);
   if (!active || !selection) return null;
+  const activeAvailable = isChatAvailable(active.prd, active.chat);
+  const activeAvailability = active.chat.phase === null ? null : getGuidedChatAvailability(active.prd, active.chat.phase);
+  const firstBlocker = activeAvailability?.blockers[0];
+  const recoveryChat = firstBlocker ? active.prd.chats.find((chat) => chat.phase === firstBlocker) : undefined;
   const send = () => {
     if (!composer.trim()) return;
     replaceWorkspace(advanceDemoConversation(workspace, selection, composer));
@@ -819,6 +901,25 @@ function ActiveChat({ viewport, focusTarget, navigationOpen, documentsOpen, navi
     );
   };
   const activeError = demoError ? getDemoScenario(demoError) : null;
+  const changeProgress = (progress: GuidedChatProgress) => {
+    const before = new Map(active.prd.chats
+      .filter((chat) => chat.kind === "guided" && chat.phase !== null)
+      .map((chat) => [chat.phase!, getGuidedChatAvailability(active.prd, chat.phase!).available]));
+    const next = changeGuidedChatProgress(workspace, selection, progress);
+    const nextPrd = next.projects.find(({ id }) => id === active.project.id)?.prds.find(({ id }) => id === active.prd.id);
+    const newlyAvailable = nextPrd?.chats.filter((chat) =>
+      chat.kind === "guided" && chat.phase !== null &&
+      before.get(chat.phase) === false && getGuidedChatAvailability(nextPrd, chat.phase).available,
+    ).map(({ title }) => title) ?? [];
+    const newlyBlocked = nextPrd?.chats.filter((chat) =>
+      chat.kind === "guided" && chat.phase !== null &&
+      before.get(chat.phase) === true && !getGuidedChatAvailability(nextPrd, chat.phase).available,
+    ).map(({ title }) => title) ?? [];
+    replaceWorkspace(next);
+    setProgressAnnouncement(
+      `Progreso: ${progressLabels[progress]}.${newlyAvailable.length > 0 ? ` ${newlyAvailable.join(" y ")} ${newlyAvailable.length === 1 ? "ya está disponible" : "ya están disponibles"}.` : ""}${newlyBlocked.length > 0 ? ` ${newlyBlocked.join(" y ")} ${newlyBlocked.length === 1 ? "volvió a bloquearse" : "volvieron a bloquearse"}; sus historiales se conservaron.` : ""}`,
+    );
+  };
   return (
     <section className="flex h-screen min-h-0 min-w-0 flex-1 flex-col xl:min-w-[30rem]" aria-labelledby="chat-title">
       <header className="border-b p-4">
@@ -826,15 +927,43 @@ function ActiveChat({ viewport, focusTarget, navigationOpen, documentsOpen, navi
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 ref={chatTitleRef} id="chat-title" tabIndex={-1} className="text-xl font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring">{active.chat.title}</h1>
-            <p className="text-sm font-medium">Estado del PRD: {lifecycleLabels[active.prd.lifecycle]}</p>
+            <p className="text-sm font-medium">
+              {active.chat.kind === "additional"
+                ? "Chat adicional"
+                : active.chat.phase === "prd"
+                  ? `Estado del PRD: ${lifecycleLabels[active.prd.lifecycle]}`
+                  : chatProgressLabel(active.chat)}
+            </p>
           </div>
+          {activeAvailable && active.chat.kind === "guided" && active.chat.phase !== null && active.chat.phase !== "prd" ? (
+            <label className="min-w-56 space-y-1 text-sm">
+              <span>Progreso de la fase</span>
+              <select
+                className={fieldClass}
+                value={active.chat.progress ?? "pending"}
+                onChange={(event) => changeProgress(event.target.value as GuidedChatProgress)}
+              >
+                <option value="pending">Pendiente</option>
+                <option value="in-progress">En curso</option>
+                <option value="ready">Listo para avanzar</option>
+                {active.chat.phase === "screen-design" || active.chat.phase === "database-design" ? <option value="not-applicable">No aplica</option> : null}
+              </select>
+            </label>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             {viewport === "mobile" ? <Button ref={navigationTriggerRef} type="button" variant="outline" aria-haspopup="dialog" aria-expanded={navigationOpen} onClick={onOpenNavigation}>Abrir navegación</Button> : null}
             <Button ref={documentsTriggerRef} type="button" variant="outline" aria-haspopup={viewport === "desktop" ? undefined : "dialog"} aria-expanded={documentsOpen} onClick={onOpenDocuments}>Abrir documentos</Button>
           </div>
         </div>
       </header>
-      <div className="border-b bg-muted/40 p-4" aria-label="Modo de demostración">
+      {!activeAvailable ? (
+        <div role="alert" className="m-4 mb-0 rounded-lg border bg-muted/40 p-4">
+          <p className="font-semibold">Esta fase volvió a bloquearse</p>
+          <p className="mt-1 text-sm">{activeAvailability?.blockers.map((phase) => blockerDescription(active.prd, phase)).join(" ")} El historial se conservó.</p>
+          {recoveryChat ? <Button className="mt-3" type="button" size="sm" variant="outline" onClick={() => replaceWorkspace(selectChat(workspace, { ...selection, chatId: recoveryChat.id }))}>Ir a {recoveryChat.title}</Button> : null}
+        </div>
+      ) : null}
+      {activeAvailable ? <div className="border-b bg-muted/40 p-4" aria-label="Modo de demostración">
         <p className="text-sm font-semibold">Modo de demostración</p>
         <p className="mt-1 text-sm text-muted-foreground">Usa un guion fijo. Los mensajes no se interpretan.</p>
         <div className="mt-3 flex flex-wrap items-end gap-2">
@@ -852,8 +981,8 @@ function ActiveChat({ viewport, focusTarget, navigationOpen, documentsOpen, navi
           </label>
           <Button ref={loadScenarioRef} type="button" variant="outline" onClick={requestScenarioLoad}>Cargar escenario</Button>
         </div>
-      </div>
-      <div className="flex-1 space-y-3 overflow-auto p-4" role="log" aria-live="polite" aria-label="Historial del Chat">
+      </div> : null}
+      <div className="flex-1 space-y-3 overflow-auto p-4" role="log" aria-live="polite" aria-label={`Historial del Chat${activeAvailable ? "" : ", sólo lectura"}`}>
         {activeError?.kind === "error" ? (
           <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
             <p className="font-semibold">{activeError.name}</p>
@@ -862,16 +991,16 @@ function ActiveChat({ viewport, focusTarget, navigationOpen, documentsOpen, navi
           </div>
         ) : null}
         {active.chat.messages.length === 0 ? (
-          <div className="grid min-h-52 place-items-center text-center"><div><h2 className="font-semibold">Describe tu idea</h2><p className="mt-1 text-sm text-muted-foreground">Cuéntanos qué quieres descubrir o documentar en este Chat.</p></div></div>
+          <div className="grid min-h-52 place-items-center text-center"><div><h2 className="font-semibold">{active.chat.kind === "additional" ? "Aclara una pregunta" : "Define esta iniciativa"}</h2><p className="mt-1 text-sm text-muted-foreground">{active.chat.kind === "additional" ? "Este Chat no cambia el avance del recorrido guiado." : "Aclara el problema, el alcance y los requisitos del producto."}</p></div></div>
         ) : active.chat.messages.map((message) => (
           <article className={`${message.role === "user" ? "ml-auto bg-muted" : "mr-auto border bg-background"} max-w-2xl rounded-lg p-3`} key={message.id}><p className="text-xs font-semibold">{message.role === "user" ? "Tú" : "Demo"}</p><p className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{message.content}</p></article>
         ))}
-        {active.prd.proposals.map((proposal) => (
+        {activeAvailable ? active.prd.proposals.map((proposal) => (
           <SensitiveProposalCard key={proposal.id} proposal={proposal} onResolve={(resolution) => resolveProposal(proposal, resolution)} />
-        ))}
+        )) : null}
       </div>
-      <p className="sr-only" aria-live="polite">{proposalAnnouncement}</p>
-      <form className="border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onSubmit={submit}>
+      <p className="sr-only" aria-live="polite">{proposalAnnouncement} {progressAnnouncement}</p>
+      {activeAvailable ? <form className="border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onSubmit={submit}>
         <label className="block text-sm font-medium" htmlFor="composer">Mensaje</label>
         <div className="mt-1 flex items-end gap-2">
           <textarea
@@ -890,8 +1019,8 @@ function ActiveChat({ viewport, focusTarget, navigationOpen, documentsOpen, navi
           />
           <Button type="submit" disabled={!composer.trim()}>Enviar</Button>
         </div>
-      </form>
-      {pendingScenario ? (
+      </form> : <p className="border-t p-4 text-sm">Chat bloqueado. No puedes enviar mensajes ni cargar escenarios hasta que se cumplan las dependencias.</p>}
+      {activeAvailable && pendingScenario ? (
         <DialogFrame title="¿Cargar este escenario?" initialFocus={cancelScenarioLoadRef} finalFocus={loadScenarioRef} onClose={() => setPendingScenario(null)}>
           <p className="text-sm text-muted-foreground">
             Cargar “{getDemoScenario(pendingScenario.id).name}” reemplazará
